@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import sys
@@ -19,6 +20,8 @@ from shared.neo4j_client import health_check as neo4j_health  # noqa: E402
 from shared.supabase_client import supabase_configured  # noqa: E402
 from shared import db  # noqa: E402
 from shared.migrations import run_migrations  # noqa: E402
+from shared.gst_verify import verify_gstin  # noqa: E402
+from shared.company_masterdata import seed_roc_companies_from_masterdata  # noqa: E402
 
 logger = logging.getLogger("fundx.user-service")
 
@@ -108,6 +111,17 @@ class CINVerificationResponse(BaseModel):
     company: dict[str, Any] | None = None
 
 
+class GSTVerificationResponse(BaseModel):
+    verified: bool
+    eligible: bool
+    message: str
+    gstin: str = ""
+    data: dict[str, Any] | None = None
+    source: str | None = None
+    credits_remaining: int | float | None = None
+    needs_api_key: bool | None = None
+
+
 @app.on_event("startup")
 async def on_startup():
     pool = await db.get_pool()
@@ -166,56 +180,76 @@ async def get_profile_by_id(user_id: str) -> dict[str, Any]:
 @app.get("/verify-cin/{cin}")
 async def verify_cin(cin: str) -> CINVerificationResponse:
     """
-    Instant MCA/ROC CIN verification endpoint.
-    
-    Checks if the provided CIN exists in the ROC companies registry.
-    - Only 'Active' companies are eligible for verification.
-    - Other statuses (Strike Off, Under CIRP, etc.) are marked ineligible.
-    
-    Args:
-        cin: Corporate Identification Number (case-insensitive)
-    
-    Returns:
-        CINVerificationResponse with verification status and company details
+    Instant MCA/ROC CIN verification against seeded company masterdata (Excel → roc_companies).
+    Only 'Active' companies are eligible.
     """
     cin_upper = cin.upper().strip()
-    
+
     try:
         company = await db.fetchrow(
             "SELECT * FROM public.roc_companies WHERE UPPER(cin) = UPPER($1)",
-            cin_upper
+            cin_upper,
         )
-        
+
         if not company:
             return CINVerificationResponse(
                 verified=False,
                 eligible=False,
-                message="CIN not found in ROC registry.",
-                company=None
+                message="CIN not found in company masterdata (ROC registry seed).",
+                company=None,
             )
-        
+
         company_dict = dict(company)
+        # Serialize dates for JSON
+        for key in ("registration_date", "created_at", "updated_at"):
+            if company_dict.get(key) is not None:
+                company_dict[key] = str(company_dict[key])
+
         is_active = company_dict.get("company_status") == "Active"
-        
+
         if is_active:
             return CINVerificationResponse(
                 verified=True,
                 eligible=True,
-                message=f"CIN verified and Active in ROC registry. Company: {company_dict.get('company_name')}",
-                company=company_dict
+                message=f"CIN verified and Active in company masterdata. Company: {company_dict.get('company_name')}",
+                company=company_dict,
             )
-        else:
-            status = company_dict.get("company_status", "Unknown")
-            return CINVerificationResponse(
-                verified=False,
-                eligible=False,
-                message=f"Company found ({status}) - only Active entities are eligible for verification.",
-                company=company_dict
-            )
-    
+
+        status = company_dict.get("company_status", "Unknown")
+        return CINVerificationResponse(
+            verified=True,
+            eligible=False,
+            message=f"Company found ({status}) — only Active entities are eligible.",
+            company=company_dict,
+        )
+
     except Exception as e:
-        logger.error(f"CIN verification error for {cin_upper}: {e}")
-        raise HTTPException(status_code=500, detail="CIN verification failed")
+        logger.error("CIN verification error for %s: %s", cin_upper, e)
+        raise HTTPException(status_code=500, detail="CIN verification failed") from e
+
+
+@app.get("/verify-gst/{gstin}")
+async def verify_gst(gstin: str) -> GSTVerificationResponse:
+    """Live GSTIN verification via gstverify.co.in (X-API-Key = GSTVERIFY_API_KEY)."""
+    result = await verify_gstin(gstin)
+    return GSTVerificationResponse(
+        verified=bool(result.get("verified")),
+        eligible=bool(result.get("eligible")),
+        message=str(result.get("message") or ""),
+        gstin=str(result.get("gstin") or gstin),
+        data=result.get("data") if isinstance(result.get("data"), dict) else None,
+        source=result.get("source"),
+        credits_remaining=result.get("credits_remaining"),
+        needs_api_key=result.get("needs_api_key"),
+    )
+
+
+@app.post("/admin/seed-company-masterdata")
+async def seed_company_masterdata_endpoint() -> dict[str, Any]:
+    """Re-import database/masterdata/company_masterdata.xlsx into roc_companies."""
+    pool = await db.get_pool()
+    result = await seed_roc_companies_from_masterdata(pool)
+    return {"message": "Company masterdata seed completed", **result}
 
 
 @app.post("/register")
@@ -242,31 +276,80 @@ async def register(payload: dict[str, Any]) -> dict[str, Any]:
     if role == "startup":
         startup_id = f"startup-{uuid.uuid4().hex[:8]}"
         industry = payload.get("industry") or "Technology"
-        gst = payload.get("gst_number") or ""
+        gst = (payload.get("gst_number") or "").upper().strip()
         cin = (payload.get("cin") or "").upper().strip()
         inc_cert = payload.get("incorporation_cert") or "INCORPORATION_CERTIFICATE.pdf"
 
-        # Check if CIN is provided and verify it
+        # CIN verification against seeded company masterdata
         is_verified = False
         verification_status = "unverified"
         verification_score = 0
-        roc_company = None
-        
+        cin_ok = False
+        gst_ok = False
+        gst_report: dict[str, Any] | None = None
+        gst_status = "unverified"
+
         if cin:
             try:
                 roc_company = await db.fetchrow(
-                    "SELECT * FROM public.roc_companies WHERE UPPER(cin) = $1",
-                    cin
+                    "SELECT * FROM public.roc_companies WHERE UPPER(cin) = UPPER($1)",
+                    cin,
                 )
                 if roc_company and roc_company.get("company_status") == "Active":
-                    is_verified = True
-                    verification_status = "verified"
-                    verification_score = 95
-                    # Auto-fill company name from ROC registry
+                    cin_ok = True
                     if not name or name == "User":
                         name = roc_company.get("company_name", name)
+                elif roc_company:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=(
+                            f"CIN found but company status is '{roc_company.get('company_status')}'. "
+                            "Only Active entities can register."
+                        ),
+                    )
+                else:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="CIN not found in company masterdata. Use a seeded Active CIN or update masterdata Excel.",
+                    )
+            except HTTPException:
+                raise
             except Exception as e:
-                logger.warning(f"CIN verification during registration failed: {e}")
+                logger.warning("CIN verification during registration failed: %s", e)
+
+        if gst:
+            try:
+                gst_report = await verify_gstin(gst)
+                gst_ok = bool(gst_report.get("eligible"))
+                gst_status = (
+                    "verified"
+                    if gst_ok
+                    else ("format_ok" if gst_report.get("source") == "format_only" else "failed")
+                )
+                # If live API is configured and GST is ineligible / invalid, block registration
+                if gst_report.get("source") == "gstverify" and not gst_ok:
+                    raise HTTPException(status_code=400, detail=gst_report.get("message") or "GST verification failed")
+                if gst_report.get("source") == "format" and not gst_report.get("verified"):
+                    raise HTTPException(status_code=400, detail=gst_report.get("message") or "Invalid GSTIN")
+                # Auto-fill legal name from GST registry when available
+                legal = (gst_report.get("data") or {}).get("legal_name")
+                if legal and (not name or name == "User"):
+                    name = legal
+            except HTTPException:
+                raise
+            except Exception as e:
+                logger.warning("GST verification during registration failed: %s", e)
+                gst_report = {"message": str(e), "source": "error"}
+
+        if cin_ok and (gst_ok or not gst or gst_status == "format_ok"):
+            # Verified when CIN is Active; GST live-pass boosts score
+            is_verified = True
+            verification_status = "verified"
+            verification_score = 98 if gst_ok else (90 if cin_ok else 70)
+        elif cin_ok:
+            is_verified = True
+            verification_status = "verified"
+            verification_score = 90
 
         # 1. Insert profile FIRST to satisfy foreign key in startups.owner_id
         await db.execute(
@@ -281,14 +364,20 @@ async def register(payload: dict[str, Any]) -> dict[str, Any]:
         # 2. Create startup in PostgreSQL
         await db.execute(
             """
-            INSERT INTO public.startups (id, owner_id, name, slug, industry, gst_number, incorporation_cert, stage, 
-                                        email, is_verified, verification_status, verification_score, verification_timestamp, cin)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, 'Seed', $8, $9, $10, $11, $12, $13)
+            INSERT INTO public.startups (
+                id, owner_id, name, slug, industry, gst_number, incorporation_cert, stage,
+                email, is_verified, verification_status, verification_score, verification_timestamp,
+                cin, gst_verification_status, gst_verification_report
+            )
+            VALUES (
+                $1, $2, $3, $4, $5, $6, $7, 'Seed', $8, $9, $10, $11, $12, $13, $14, $15::jsonb
+            )
             ON CONFLICT (id) DO NOTHING
             """,
             startup_id, user_id, name, f"{name.lower().replace(' ', '-')}-{uuid.uuid4().hex[:4]}",
             industry, gst, inc_cert, email, is_verified, verification_status, verification_score,
-            datetime.utcnow() if is_verified else None, cin if cin else None
+            datetime.utcnow() if is_verified else None, cin if cin else None,
+            gst_status, json.dumps(gst_report) if gst_report else None,
         )
 
         # Notify startup-service if available
@@ -327,6 +416,8 @@ async def register(payload: dict[str, Any]) -> dict[str, Any]:
             "is_verified": is_verified,
             "verification_status": verification_status,
             "verification_score": verification_score,
+            "gst_verification_status": gst_status,
+            "gst_verification": gst_report,
             "created_at": datetime.utcnow().isoformat() + "Z",
         }
         _PROFILES[user_id] = profile

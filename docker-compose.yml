@@ -69,8 +69,13 @@ services:
       SERVICE_NAME: user-service
       PORT: 8001
       DATABASE_URL: postgresql://fundx_user:fundx_password@postgres:5432/fundx_db
+      GSTVERIFY_API_KEY: ${GSTVERIFY_API_KEY:-}
+      GSTVERIFY_BASE_URL: ${GSTVERIFY_BASE_URL:-https://gstverify.co.in}
+      COMPANY_MASTERDATA_PATH: /app/database/masterdata/company_masterdata.xlsx
     ports:
       - "8001:8001"
+    volumes:
+      - ./database:/app/database:ro
     depends_on:
       neo4j:
         condition: service_healthy

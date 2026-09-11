@@ -117,6 +117,9 @@ export const api = {
   getProfile: () => request('/api/users/profile'),
   listUsers: () => request('/api/users/list'),
   verifyCin: (cin) => request(`/api/users/verify-cin/${encodeURIComponent(cin)}`),
+  verifyGst: (gstin) => request(`/api/users/verify-gst/${encodeURIComponent(gstin)}`),
+  seedCompanyMasterdata: () =>
+    request('/api/users/admin/seed-company-masterdata', { method: 'POST', body: '{}' }),
 
   // Startups
   listStartups: () => request('/api/startups'),

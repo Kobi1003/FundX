@@ -33,16 +33,25 @@ Also: [`uploads/demo_docs/AEROGRID_INCORPORATION_DEMO.txt`](../uploads/demo_docs
 
 Use unique emails each run (or delete prior users). Suggested:
 
-### Startup A — CleanTech
+### Startup A — CleanTech (with CIN + GST)
 | Field | Value |
 |---|---|
 | Role | Startup |
-| Name | NovaGrid Energy Demo |
+| Name | (auto-fills from CIN) AeroGrid Tech Innovations Private Limited |
 | Email | `founder.novagrid@demo.fundx` |
 | Password | `DemoPass123!` |
 | Industry | CleanTech |
-| GST | `29AABCU9603R1ZM` |
+| **CIN** | `U40100WB2022PTC256639` (instant verify from Excel masterdata) |
+| GST | your real test GSTIN (needs `GSTVERIFY_API_KEY`) or `29AABCU9603R1ZM` for format check |
 | Incorporation file | `uploads/demo_docs/AEROGRID_INCORPORATION_DEMO.txt` |
+
+### More Active CINs from `database/masterdata/company_masterdata.xlsx`
+- `U72900KA2024PTC182001` — NovaGrid Energy Systems Private Limited
+- `U72900MH2024PTC421100` — FundX Demo Ventures Private Limited
+- `U62011KA2022PTC117654` — NeuroVenture Analytics Private Limited
+
+### Ineligible CIN (should show Not Eligible)
+- `U35201WB2023PTC262723` — Strike Off
 
 ### Startup B — FinTech
 | Field | Value |
@@ -93,6 +102,14 @@ MAX_AI_CALLS_PER_WORKFLOW=8
 MAX_AI_RETRIES=2
 UPLOAD_ROOT=/app/uploads
 ```
+
+### GST live verification (startup registration)
+```env
+GSTVERIFY_API_KEY=your_key_from_gstverify.co.in
+GSTVERIFY_BASE_URL=https://gstverify.co.in
+COMPANY_MASTERDATA_PATH=/app/database/masterdata/company_masterdata.xlsx
+```
+Then: `docker compose up -d --build user-service`
 
 ### Live Gemini free tier (still $0; watch quotas)
 ```env

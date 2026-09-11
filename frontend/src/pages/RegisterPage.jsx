@@ -66,14 +66,17 @@ export default function RegisterPage() {
   const [error, setError] = useState(null)
   const [success, setSuccess] = useState(null)
   
-  // CIN verification states
+  // CIN / GST verification states
   const [startupCinVerifying, setStartupCinVerifying] = useState(false)
   const [startupCinResult, setStartupCinResult] = useState(null)
+  const [startupGstVerifying, setStartupGstVerifying] = useState(false)
+  const [startupGstResult, setStartupGstResult] = useState(null)
   const [investorCinVerifying, setInvestorCinVerifying] = useState(false)
   const [investorCinResult, setInvestorCinResult] = useState(null)
 
-  // Debounce timer for auto-verification
+  // Debounce timers
   const [debounceTimer, setDebounceTimer] = useState(null)
+  const [gstDebounceTimer, setGstDebounceTimer] = useState(null)
 
   const handleStartupCinChange = async (e) => {
     let cin = e.target.value.toUpperCase().trim()
@@ -121,6 +124,37 @@ export default function RegisterPage() {
       })
     } finally {
       setStartupCinVerifying(false)
+    }
+  }
+
+  const handleStartupGstChange = (e) => {
+    const gst = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '')
+    setStartupForm({ ...startupForm, gst_number: gst })
+    setStartupGstResult(null)
+    if (gstDebounceTimer) clearTimeout(gstDebounceTimer)
+    if (gst.length === 15) {
+      const timer = setTimeout(async () => {
+        setStartupGstVerifying(true)
+        try {
+          const result = await api.verifyGst(gst)
+          setStartupGstResult(result)
+          if (result.eligible && result.data?.legal_name) {
+            setStartupForm((prev) => ({
+              ...prev,
+              name: prev.name || result.data.legal_name,
+            }))
+          }
+        } catch (err) {
+          setStartupGstResult({
+            verified: false,
+            eligible: false,
+            message: err.message || 'GST verification failed',
+          })
+        } finally {
+          setStartupGstVerifying(false)
+        }
+      }, 450)
+      setGstDebounceTimer(timer)
     }
   }
 
@@ -173,6 +207,18 @@ export default function RegisterPage() {
     // Validate required fields
     if (!startupForm.name || !startupForm.email || !startupForm.password) {
       setError('Please fill in all required fields')
+      setLoading(false)
+      return
+    }
+
+    // Soft-block clearly ineligible CIN / GST before submit
+    if (startupForm.cin && startupCinResult && !startupCinResult.eligible) {
+      setError(startupCinResult.message || 'CIN is not eligible for registration')
+      setLoading(false)
+      return
+    }
+    if (startupForm.gst_number && startupForm.gst_number.length === 15 && startupGstResult && startupGstResult.source === 'gstverify' && !startupGstResult.eligible) {
+      setError(startupGstResult.message || 'GSTIN is not Active / eligible')
       setLoading(false)
       return
     }
@@ -411,17 +457,60 @@ export default function RegisterPage() {
             </div>
 
             <div>
-              <label className="block font-semibold text-slate-700 mb-1">GST Number (GSTIN)</label>
-              <input
-                type="text"
-                placeholder="e.g. 27AABCA1234F1Z8"
-                value={startupForm.gst_number}
-                onChange={(e) => setStartupForm({ ...startupForm, gst_number: e.target.value.toUpperCase() })}
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs font-mono font-bold text-slate-900 uppercase focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-              />
+              <label className="block font-semibold text-slate-700 mb-1">
+                GST Number (GSTIN) <span className="text-amber-600 font-normal">(Live GSTVerify)</span>
+              </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="e.g. 27AABCA1234F1Z5"
+                  value={startupForm.gst_number}
+                  onChange={handleStartupGstChange}
+                  maxLength={15}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs font-mono font-bold text-slate-900 uppercase focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                />
+                {startupGstVerifying && (
+                  <Loader className="absolute right-3 top-2.5 h-5 w-5 text-slate-400 animate-spin" />
+                )}
+              </div>
               <span className="text-[10px] text-slate-400 mt-1 block">
-                15-digit statutory GST registry identifier
+                15-digit GSTIN verified via gstverify.co.in when GSTVERIFY_API_KEY is set
               </span>
+              {startupGstResult && (
+                <div className={`rounded-xl border p-3 mt-2 ${
+                  startupGstResult.eligible
+                    ? 'border-emerald-300 bg-emerald-50'
+                    : startupGstResult.needs_api_key
+                      ? 'border-slate-300 bg-slate-50'
+                      : 'border-amber-300 bg-amber-50'
+                }`}>
+                  <div className="flex items-start gap-2">
+                    {startupGstResult.eligible ? (
+                      <CheckCircle2 className="h-4 w-4 text-emerald-600 mt-0.5 shrink-0" />
+                    ) : (
+                      <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+                    )}
+                    <div className="flex-1">
+                      <p className={`text-xs font-bold ${
+                        startupGstResult.eligible ? 'text-emerald-900' : 'text-amber-900'
+                      }`}>
+                        {startupGstResult.eligible
+                          ? 'GSTIN Verified (Active)'
+                          : startupGstResult.needs_api_key
+                            ? 'Format OK — API key needed for live check'
+                            : 'GST verification issue'}
+                      </p>
+                      <p className="text-[11px] mt-1 text-slate-700">{startupGstResult.message}</p>
+                      {startupGstResult.data?.legal_name && (
+                        <p className="text-[10px] font-bold text-slate-900 mt-2 p-2 rounded bg-white/70">
+                          {startupGstResult.data.legal_name}
+                          {startupGstResult.data.state ? ` · ${startupGstResult.data.state}` : ''}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div>
