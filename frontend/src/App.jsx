@@ -22,6 +22,7 @@ import StartupCreateDealPage from './pages/startup/StartupCreateDealPage'
 import InvestorDashboardPage from './pages/investor/InvestorDashboardPage'
 import InvestorListedDealsPage from './pages/investor/InvestorListedDealsPage'
 import InvestorDealroomPage from './pages/investor/InvestorDealroomPage'
+import InvestorMyDealsPage from './pages/investor/InvestorMyDealsPage'
 import InvestorProfilePage from './pages/investor/InvestorProfilePage'
 
 function DashboardRedirect() {
@@ -63,6 +64,7 @@ export default function App() {
             <Route path="/investor/dashboard" element={<InvestorDashboardPage />} />
             <Route path="/investor/deals" element={<InvestorListedDealsPage />} />
             <Route path="/investor/dealroom" element={<InvestorDealroomPage />} />
+            <Route path="/investor/my-deals" element={<InvestorMyDealsPage />} />
             <Route path="/investor/profile" element={<InvestorProfilePage />} />
 
             {/* Legacy Fallbacks */}

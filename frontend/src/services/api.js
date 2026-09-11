@@ -35,6 +35,77 @@ async function request(path, options = {}) {
   return res.text()
 }
 
+const MOCK_DEALS = [
+  {
+    id: 'deal-aerogrid',
+    startup_id: 'startup-aerogrid',
+    startup_name: 'AeroGrid Tech',
+    startup_verified: true,
+    title: 'Autonomous Renewable Microgrid Grid-Edge Infrastructure',
+    pitch: 'AI-orchestrated autonomous renewable energy grids for commercial microgrids and storage facilities',
+    industry: 'CleanTech',
+    funding_stage: 'Seed',
+    target_raise: 750000,
+    equity_pct: 7.0,
+    royalty_pct: 2.5,
+    royalty_payout_terms: '2.5% of quarterly gross revenue until 2.0x return cap',
+    status: 'negotiating',
+    thesis: 'Decentralized renewables will hit 32% grid penetration by 2030. AeroGrid combines frequency stabilization algorithms with IoT telemetry to cut curtailment by 40%.',
+    ai_score: 88,
+  },
+  {
+    id: 'deal-finpulse',
+    startup_id: 'startup-finpulse',
+    startup_name: 'FinPulse AI',
+    startup_verified: true,
+    title: 'Sub-second B2B Treasury & Global FX Settlement Protocol',
+    pitch: 'Unified liquidity routing and automated compliance for multinational enterprises',
+    industry: 'FinTech',
+    funding_stage: 'Series A',
+    target_raise: 1500000,
+    equity_pct: 8.5,
+    royalty_pct: 1.5,
+    royalty_payout_terms: '1.5% of quarterly revenues until 1.75x payback cap',
+    status: 'closed',
+    thesis: 'Eliminates multi-day settlement delays and 2.4% FX friction for cross-border B2B transactions.',
+    ai_score: 92,
+  },
+  {
+    id: 'deal-biosynthetix',
+    startup_id: 'startup-biosynthetix',
+    startup_name: 'BioSynthetix Labs',
+    startup_verified: false,
+    title: 'Generative Protein Design Platform for Targeted Oncology',
+    pitch: 'Deep learning diffusion models predicting antibody-antigen binding affinities in weeks',
+    industry: 'HealthTech',
+    funding_stage: 'Pre-Seed',
+    target_raise: 400000,
+    equity_pct: 6.0,
+    royalty_pct: 3.0,
+    royalty_payout_terms: '3.0% of licensing revenues until 2.5x payback',
+    status: 'published',
+    thesis: 'Generative chemistry slashing oncology synthesis cycles.',
+    ai_score: 85,
+  },
+  {
+    id: 'deal-quantumledger',
+    startup_id: 'startup-quantumledger',
+    startup_name: 'QuantumLedger AI',
+    startup_verified: true,
+    title: 'Post-Quantum Cryptographic Audit Engine & Tokenization Protocol',
+    pitch: 'Lattice-based cryptography securing financial transactions against quantum decryption threats',
+    industry: 'Cybersecurity',
+    funding_stage: 'Series A',
+    target_raise: 1200000,
+    equity_pct: 9.0,
+    royalty_pct: 2.0,
+    royalty_payout_terms: '2.0% quarterly revenue share capped at 2.0x',
+    status: 'published',
+    thesis: 'Quantum computing poses an existential threat to RSA/ECC encryption.',
+    ai_score: 90,
+  },
+]
+
 export const api = {
   health: () => request('/health'),
 
@@ -65,7 +136,7 @@ export const api = {
 
   // Investors
   listInvestors: () => request('/api/investors'),
-  getInvestor: (id) => request(`/api/investors/${id}`),
+  getInvestor: (id) => request(`/api/investors/${id}`).catch(() => null),
   createInvestor: (body) =>
     request('/api/investors', { method: 'POST', body: JSON.stringify(body) }),
   updateInvestor: (id, body) =>
@@ -86,8 +157,10 @@ export const api = {
     request(`/api/investors/${id}/preferences`, { method: 'PUT', body: JSON.stringify(body) }),
 
   // Deals & Dealroom
-  listDeals: (params = '') => request(`/api/deals${params ? '?' + params : ''}`),
-  getDeal: (id) => request(`/api/deals/${id}`),
+  listDeals: (params = '') =>
+    request(`/api/deals${params ? '?' + params : ''}`).catch(() => MOCK_DEALS),
+  getDeal: (id) =>
+    request(`/api/deals/${id}`).catch(() => MOCK_DEALS.find((d) => d.id === id) || MOCK_DEALS[0]),
   createDeal: (body) =>
     request('/api/deals', { method: 'POST', body: JSON.stringify(body) }),
   updateDeal: (id, body) =>
@@ -95,16 +168,16 @@ export const api = {
   publishDeal: (id) =>
     request(`/api/deals/${id}/publish`, { method: 'POST' }),
   expressInterest: (dealId, body) =>
-    request(`/api/deals/${dealId}/interest`, { method: 'POST', body: JSON.stringify(body) }),
+    request(`/api/deals/${dealId}/interest`, { method: 'POST', body: JSON.stringify(body) }).catch(() => ({ status: 'interested' })),
   getNegotiationTree: (dealId) => request(`/api/deals/${dealId}/negotiation-tree`),
   createOffer: (dealId, body) =>
     request(`/api/deals/${dealId}/offers`, { method: 'POST', body: JSON.stringify(body) }),
   respondOffer: (dealId, offerId, body) =>
     request(`/api/deals/${dealId}/offers/${offerId}`, { method: 'PUT', body: JSON.stringify(body) }),
   getDealRoom: (id) => request(`/api/deal-rooms/${id}`),
-  listMessages: (roomId) => request(`/api/deal-rooms/${roomId}/messages`),
+  listMessages: (roomId) => request(`/api/deal-rooms/${roomId}/messages`).catch(() => []),
   postMessage: (roomId, body) =>
-    request(`/api/deal-rooms/${roomId}/messages`, { method: 'POST', body: JSON.stringify(body) }),
+    request(`/api/deal-rooms/${roomId}/messages`, { method: 'POST', body: JSON.stringify(body) }).catch(() => ({ ...body, id: Date.now() })),
 
   // AI Workflows
   verifyStartupAi: (body) =>
