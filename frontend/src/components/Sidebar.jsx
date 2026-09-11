@@ -14,6 +14,7 @@ import {
   Compass,
   FileCheck2,
   Sparkles,
+  LineChart,
 } from 'lucide-react'
 
 export default function Sidebar() {
@@ -31,6 +32,7 @@ export default function Sidebar() {
             { to: '/admin/investors', label: 'Investors Directory', icon: Users },
             { to: '/admin/marketplace', label: 'Deal Marketplace', icon: Handshake },
             { to: '/admin/company-edit', label: 'Edit Company & Audit', icon: ShieldCheck },
+            { to: '/simulation', label: 'Financial Simulator', icon: LineChart },
           ],
         },
       ]
@@ -45,6 +47,7 @@ export default function Sidebar() {
             { to: '/startup/dealroom', label: 'Dealroom Negotiations', icon: Handshake },
             { to: '/startup/verifier', label: 'AI Claims Verifier', icon: ShieldCheck },
             { to: '/startup/deals/create', label: 'Create New Deal', icon: PlusCircle },
+            { to: '/simulation', label: 'Financial Simulator', icon: LineChart },
           ],
         },
       ]
@@ -60,6 +63,7 @@ export default function Sidebar() {
             { to: '/investor/dealroom', label: 'Dealroom', icon: Handshake },
             { to: '/investor/my-deals', label: 'My Deals', icon: FileCheck2 },
             { to: '/investor/profile', label: 'Profile & CV Verification', icon: UserCheck },
+            { to: '/simulation', label: 'Financial Simulator', icon: LineChart },
           ],
         },
       ]
@@ -74,6 +78,7 @@ export default function Sidebar() {
           { to: '/investor/deals', label: 'Explore Listed Deals', icon: Layers },
           { to: '/login', label: 'Sign In to Account', icon: LogIn },
           { to: '/register', label: 'Register Account', icon: UserPlus },
+          { to: '/simulation', label: 'Financial Simulator', icon: LineChart },
         ],
       },
     ]
