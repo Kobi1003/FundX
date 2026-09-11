@@ -161,6 +161,11 @@ class InvestorCreate(BaseModel):
     firm: str | None = None
     bio: str | None = None
     thesis: str | None = None
+    cin: str | None = None
+    gst_number: str | None = None
+    is_verified: bool | None = None
+    verification_status: str | None = None
+    verification_score: int | None = None
 
 
 class InvestorUpdate(BaseModel):
@@ -171,6 +176,8 @@ class InvestorUpdate(BaseModel):
     thesis: str | None = None
     cv_filename: str | None = None
     cv_text: str | None = None
+    cin: str | None = None
+    gst_number: str | None = None
     is_verified: bool | None = None
 
 
@@ -218,26 +225,54 @@ async def list_investors() -> list[dict[str, Any]]:
 async def create_investor(payload: InvestorCreate) -> dict[str, Any]:
     investor_id = payload.id or f"investor-{uuid.uuid4().hex[:8]}"
 
+    # Handle CIN verification
+    cin = (payload.cin or "").upper().strip()
+    gst_number = (payload.gst_number or "").upper().strip()
+    is_verified = payload.is_verified or False
+    verification_status = payload.verification_status or "unverified"
+    verification_score = payload.verification_score or 40
+    
+    if cin:
+        try:
+            roc_company = await db.fetchrow(
+                "SELECT * FROM public.roc_companies WHERE UPPER(cin) = $1",
+                cin
+            )
+            if roc_company and roc_company.get("company_status") == "Active":
+                is_verified = True
+                verification_status = "verified"
+                verification_score = 95
+        except Exception as e:
+            logger.warning(f"CIN verification in investor creation failed: {e}")
+
     await db.execute(
         """
         INSERT INTO public.investors (
-            id, display_name, email, firm, bio, thesis, is_verified, verification_status, verification_score
+            id, display_name, email, firm, bio, thesis, cin, gst_number,
+            is_verified, verification_status, verification_score, verification_timestamp
         ) VALUES (
-            $1, $2, $3, $4, $5, $6, FALSE, 'unverified', 40
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
         )
         ON CONFLICT (id) DO UPDATE SET
             display_name = EXCLUDED.display_name,
-            firm = COALESCE(EXCLUDED.firm, investors.firm)
+            firm = COALESCE(EXCLUDED.firm, investors.firm),
+            cin = COALESCE(EXCLUDED.cin, investors.cin),
+            gst_number = COALESCE(EXCLUDED.gst_number, investors.gst_number),
+            is_verified = COALESCE(EXCLUDED.is_verified, investors.is_verified),
+            verification_status = COALESCE(EXCLUDED.verification_status, investors.verification_status),
+            verification_score = COALESCE(EXCLUDED.verification_score, investors.verification_score)
         """,
         investor_id, payload.display_name, payload.email, payload.firm or "Private Angel",
-        payload.bio, payload.thesis
+        payload.bio, payload.thesis, cin if cin else None, gst_number if gst_number else None,
+        is_verified, verification_status, verification_score,
+        datetime.utcnow() if is_verified else None
     )
 
     row = {
         "id": investor_id,
-        "is_verified": False,
-        "verification_status": "unverified",
-        "verification_score": 40,
+        "is_verified": is_verified,
+        "verification_status": verification_status,
+        "verification_score": verification_score,
         "verification_report": None,
         "cv_filename": None,
         "cv_text": None,

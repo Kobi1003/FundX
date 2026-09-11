@@ -18,6 +18,7 @@ from shared.auth import optional_current_user, require_current_user  # noqa: E40
 from shared.neo4j_client import health_check as neo4j_health  # noqa: E402
 from shared.supabase_client import supabase_configured  # noqa: E402
 from shared import db  # noqa: E402
+from shared.migrations import run_migrations  # noqa: E402
 
 logger = logging.getLogger("fundx.user-service")
 
@@ -100,9 +101,17 @@ class ProfileCreate(BaseModel):
     email: str | None = None
 
 
+class CINVerificationResponse(BaseModel):
+    verified: bool
+    eligible: bool
+    message: str
+    company: dict[str, Any] | None = None
+
+
 @app.on_event("startup")
 async def on_startup():
-    await db.get_pool()
+    pool = await db.get_pool()
+    await run_migrations(pool)
 
 
 @app.get("/health")
@@ -154,6 +163,61 @@ async def get_profile_by_id(user_id: str) -> dict[str, Any]:
     raise HTTPException(status_code=404, detail="User not found")
 
 
+@app.get("/verify-cin/{cin}")
+async def verify_cin(cin: str) -> CINVerificationResponse:
+    """
+    Instant MCA/ROC CIN verification endpoint.
+    
+    Checks if the provided CIN exists in the ROC companies registry.
+    - Only 'Active' companies are eligible for verification.
+    - Other statuses (Strike Off, Under CIRP, etc.) are marked ineligible.
+    
+    Args:
+        cin: Corporate Identification Number (case-insensitive)
+    
+    Returns:
+        CINVerificationResponse with verification status and company details
+    """
+    cin_upper = cin.upper().strip()
+    
+    try:
+        company = await db.fetchrow(
+            "SELECT * FROM public.roc_companies WHERE UPPER(cin) = UPPER($1)",
+            cin_upper
+        )
+        
+        if not company:
+            return CINVerificationResponse(
+                verified=False,
+                eligible=False,
+                message="CIN not found in ROC registry.",
+                company=None
+            )
+        
+        company_dict = dict(company)
+        is_active = company_dict.get("company_status") == "Active"
+        
+        if is_active:
+            return CINVerificationResponse(
+                verified=True,
+                eligible=True,
+                message=f"CIN verified and Active in ROC registry. Company: {company_dict.get('company_name')}",
+                company=company_dict
+            )
+        else:
+            status = company_dict.get("company_status", "Unknown")
+            return CINVerificationResponse(
+                verified=False,
+                eligible=False,
+                message=f"Company found ({status}) - only Active entities are eligible for verification.",
+                company=company_dict
+            )
+    
+    except Exception as e:
+        logger.error(f"CIN verification error for {cin_upper}: {e}")
+        raise HTTPException(status_code=500, detail="CIN verification failed")
+
+
 @app.post("/register")
 async def register(payload: dict[str, Any]) -> dict[str, Any]:
     role = (payload.get("role") or "startup").lower().strip()
@@ -179,17 +243,52 @@ async def register(payload: dict[str, Any]) -> dict[str, Any]:
         startup_id = f"startup-{uuid.uuid4().hex[:8]}"
         industry = payload.get("industry") or "Technology"
         gst = payload.get("gst_number") or ""
+        cin = (payload.get("cin") or "").upper().strip()
         inc_cert = payload.get("incorporation_cert") or "INCORPORATION_CERTIFICATE.pdf"
 
-        # Create startup in PostgreSQL
+        # Check if CIN is provided and verify it
+        is_verified = False
+        verification_status = "unverified"
+        verification_score = 0
+        roc_company = None
+        
+        if cin:
+            try:
+                roc_company = await db.fetchrow(
+                    "SELECT * FROM public.roc_companies WHERE UPPER(cin) = $1",
+                    cin
+                )
+                if roc_company and roc_company.get("company_status") == "Active":
+                    is_verified = True
+                    verification_status = "verified"
+                    verification_score = 95
+                    # Auto-fill company name from ROC registry
+                    if not name or name == "User":
+                        name = roc_company.get("company_name", name)
+            except Exception as e:
+                logger.warning(f"CIN verification during registration failed: {e}")
+
+        # 1. Insert profile FIRST to satisfy foreign key in startups.owner_id
         await db.execute(
             """
-            INSERT INTO public.startups (id, owner_id, name, slug, industry, gst_number, incorporation_cert, stage, email, is_verified, verification_status)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, 'Seed', $8, FALSE, 'pending')
+            INSERT INTO public.profiles (id, email, password_hash, full_name, role, is_verified, cin)
+            VALUES ($1, $2, $3, $4, 'startup', $5, $6)
+            ON CONFLICT (id) DO NOTHING
+            """,
+            user_id, email, password, name, is_verified, cin if cin else None
+        )
+
+        # 2. Create startup in PostgreSQL
+        await db.execute(
+            """
+            INSERT INTO public.startups (id, owner_id, name, slug, industry, gst_number, incorporation_cert, stage, 
+                                        email, is_verified, verification_status, verification_score, verification_timestamp, cin)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, 'Seed', $8, $9, $10, $11, $12, $13)
             ON CONFLICT (id) DO NOTHING
             """,
             startup_id, user_id, name, f"{name.lower().replace(' ', '-')}-{uuid.uuid4().hex[:4]}",
-            industry, gst, inc_cert, email
+            industry, gst, inc_cert, email, is_verified, verification_status, verification_score,
+            datetime.utcnow() if is_verified else None, cin if cin else None
         )
 
         # Notify startup-service if available
@@ -202,23 +301,17 @@ async def register(payload: dict[str, Any]) -> dict[str, Any]:
                         "name": name,
                         "industry": industry,
                         "gst_number": gst,
+                        "cin": cin,
                         "incorporation_cert": inc_cert,
                         "email": email,
                         "stage": "Seed",
+                        "is_verified": is_verified,
+                        "verification_status": verification_status,
+                        "verification_score": verification_score,
                     }
                 )
         except Exception:
             pass
-
-        # Insert profile
-        await db.execute(
-            """
-            INSERT INTO public.profiles (id, email, password_hash, full_name, role, startup_id, is_verified)
-            VALUES ($1, $2, $3, $4, 'startup', $5, FALSE)
-            ON CONFLICT (id) DO NOTHING
-            """,
-            user_id, email, password, name, startup_id
-        )
 
         profile = {
             "id": user_id,
@@ -229,8 +322,11 @@ async def register(payload: dict[str, Any]) -> dict[str, Any]:
             "startup_name": name,
             "industry": industry,
             "gst_number": gst,
+            "cin": cin,
             "incorporation_cert": inc_cert,
-            "is_verified": False,
+            "is_verified": is_verified,
+            "verification_status": verification_status,
+            "verification_score": verification_score,
             "created_at": datetime.utcnow().isoformat() + "Z",
         }
         _PROFILES[user_id] = profile
@@ -239,15 +335,49 @@ async def register(payload: dict[str, Any]) -> dict[str, Any]:
     elif role == "investor":
         investor_id = f"investor-{uuid.uuid4().hex[:8]}"
         firm = payload.get("firm") or "Private Angel"
+        cin = (payload.get("cin") or "").upper().strip()
+        gst_number = (payload.get("gst_number") or "").upper().strip()
 
-        # Create investor in PostgreSQL
+        # Check if corporate CIN is provided and verify it
+        is_verified = False
+        verification_status = "unverified"
+        verification_score = 0
+        
+        if cin:
+            try:
+                roc_company = await db.fetchrow(
+                    "SELECT * FROM public.roc_companies WHERE UPPER(cin) = $1",
+                    cin
+                )
+                if roc_company and roc_company.get("company_status") == "Active":
+                    is_verified = True
+                    verification_status = "verified"
+                    verification_score = 95
+                    # Update firm name from ROC registry
+                    firm = roc_company.get("company_name", firm)
+            except Exception as e:
+                logger.warning(f"CIN verification during investor registration failed: {e}")
+
+        # 1. Insert profile FIRST to satisfy foreign key in investors.owner_id
         await db.execute(
             """
-            INSERT INTO public.investors (id, owner_id, display_name, email, firm, is_verified, verification_status)
-            VALUES ($1, $2, $3, $4, $5, FALSE, 'unverified')
+            INSERT INTO public.profiles (id, email, password_hash, full_name, role, is_verified, cin)
+            VALUES ($1, $2, $3, $4, 'investor', $5, $6)
             ON CONFLICT (id) DO NOTHING
             """,
-            investor_id, user_id, name, email, firm
+            user_id, email, password, name, is_verified, cin if cin else None
+        )
+
+        # 2. Create investor in PostgreSQL
+        await db.execute(
+            """
+            INSERT INTO public.investors (id, owner_id, display_name, email, firm, is_verified, 
+                                         verification_status, verification_score, verification_timestamp, cin, gst_number)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+            ON CONFLICT (id) DO NOTHING
+            """,
+            investor_id, user_id, name, email, firm, is_verified, verification_status, verification_score,
+            datetime.utcnow() if is_verified else None, cin if cin else None, gst_number if gst_number else None
         )
 
         # Notify investor-service if available
@@ -260,20 +390,15 @@ async def register(payload: dict[str, Any]) -> dict[str, Any]:
                         "display_name": name,
                         "email": email,
                         "firm": firm,
+                        "cin": cin,
+                        "gst_number": gst_number,
+                        "is_verified": is_verified,
+                        "verification_status": verification_status,
+                        "verification_score": verification_score,
                     }
                 )
         except Exception:
             pass
-
-        # Insert profile
-        await db.execute(
-            """
-            INSERT INTO public.profiles (id, email, password_hash, full_name, role, investor_id, is_verified)
-            VALUES ($1, $2, $3, $4, 'investor', $5, FALSE)
-            ON CONFLICT (id) DO NOTHING
-            """,
-            user_id, email, password, name, investor_id
-        )
 
         profile = {
             "id": user_id,
@@ -282,7 +407,11 @@ async def register(payload: dict[str, Any]) -> dict[str, Any]:
             "role": "investor",
             "investor_id": investor_id,
             "firm": firm,
-            "is_verified": False,
+            "cin": cin,
+            "gst_number": gst_number,
+            "is_verified": is_verified,
+            "verification_status": verification_status,
+            "verification_score": verification_score,
             "created_at": datetime.utcnow().isoformat() + "Z",
         }
         _PROFILES[user_id] = profile
@@ -401,3 +530,11 @@ async def upsert_profile(payload: ProfileCreate) -> dict[str, Any]:
         )
     _PROFILES[user_id] = profile
     return profile
+
+
+@app.post("/admin/run-migrations")
+async def run_migrations_endpoint() -> dict[str, str]:
+    """Admin endpoint to trigger database migrations."""
+    pool = await db.get_pool()
+    await run_migrations(pool)
+    return {"message": "Migrations completed successfully"}

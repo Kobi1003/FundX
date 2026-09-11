@@ -140,10 +140,14 @@ class StartupCreate(BaseModel):
     stage: str | None = None
     thesis: str | None = None
     gst_number: str | None = None
+    cin: str | None = None
     incorporation_cert: str | None = None
     website: str | None = None
     email: str | None = None
     owner_id: str | None = None
+    is_verified: bool | None = None
+    verification_status: str | None = None
+    verification_score: int | None = None
 
 
 class StartupUpdate(BaseModel):
@@ -154,6 +158,7 @@ class StartupUpdate(BaseModel):
     stage: str | None = None
     thesis: str | None = None
     gst_number: str | None = None
+    cin: str | None = None
     incorporation_cert: str | None = None
     website: str | None = None
     email: str | None = None
@@ -200,25 +205,50 @@ async def create_startup(payload: StartupCreate) -> dict[str, Any]:
     startup_id = payload.id or f"startup-{uuid.uuid4().hex[:8]}"
     slug = f"{payload.name.lower().replace(' ', '-')}-{uuid.uuid4().hex[:4]}"
 
+    # Handle CIN verification
+    cin = (payload.cin or "").upper().strip()
+    is_verified = payload.is_verified or False
+    verification_status = payload.verification_status or "pending"
+    verification_score = payload.verification_score or 50
+    
+    if cin:
+        try:
+            roc_company = await db.fetchrow(
+                "SELECT * FROM public.roc_companies WHERE UPPER(cin) = $1",
+                cin
+            )
+            if roc_company and roc_company.get("company_status") == "Active":
+                is_verified = True
+                verification_status = "verified"
+                verification_score = 95
+        except Exception as e:
+            logger.warning(f"CIN verification in startup creation failed: {e}")
+
     # Insert into PostgreSQL
     await db.execute(
         """
         INSERT INTO public.startups (
             id, owner_id, name, slug, tagline, description, industry, stage,
-            website, email, thesis, gst_number, incorporation_cert,
-            is_verified, verification_status, verification_score
+            website, email, thesis, gst_number, cin, incorporation_cert,
+            is_verified, verification_status, verification_score, verification_timestamp
         ) VALUES (
-            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, FALSE, 'pending', 50
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18
         )
         ON CONFLICT (id) DO UPDATE SET
             name = EXCLUDED.name,
             industry = COALESCE(EXCLUDED.industry, startups.industry),
             gst_number = COALESCE(EXCLUDED.gst_number, startups.gst_number),
-            incorporation_cert = COALESCE(EXCLUDED.incorporation_cert, startups.incorporation_cert)
+            cin = COALESCE(EXCLUDED.cin, startups.cin),
+            incorporation_cert = COALESCE(EXCLUDED.incorporation_cert, startups.incorporation_cert),
+            is_verified = COALESCE(EXCLUDED.is_verified, startups.is_verified),
+            verification_status = COALESCE(EXCLUDED.verification_status, startups.verification_status),
+            verification_score = COALESCE(EXCLUDED.verification_score, startups.verification_score)
         """,
         startup_id, payload.owner_id, payload.name, slug, payload.tagline, payload.description,
         payload.industry or "Technology", payload.stage or "Seed", payload.website, payload.email,
-        payload.thesis, payload.gst_number, payload.incorporation_cert
+        payload.thesis, payload.gst_number, cin if cin else None, payload.incorporation_cert,
+        is_verified, verification_status, verification_score,
+        datetime.utcnow() if is_verified else None
     )
 
     if payload.incorporation_cert:
@@ -236,9 +266,9 @@ async def create_startup(payload: StartupCreate) -> dict[str, Any]:
 
     row = {
         "id": startup_id,
-        "is_verified": False,
-        "verification_status": "pending",
-        "verification_score": 50,
+        "is_verified": is_verified,
+        "verification_status": verification_status,
+        "verification_score": verification_score,
         "verification_report": None,
         "created_at": datetime.utcnow().isoformat() + "Z",
         **payload.model_dump(),

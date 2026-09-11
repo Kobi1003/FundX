@@ -116,6 +116,7 @@ export const api = {
     request('/api/users/register', { method: 'POST', body: JSON.stringify(body) }),
   getProfile: () => request('/api/users/profile'),
   listUsers: () => request('/api/users/list'),
+  verifyCin: (cin) => request(`/api/users/verify-cin/${encodeURIComponent(cin)}`),
 
   // Startups
   listStartups: () => request('/api/startups'),
