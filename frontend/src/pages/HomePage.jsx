@@ -1,141 +1,187 @@
-import { Link } from 'react-router-dom'
-import Button from '../components/Button'
-import PageContainer from '../components/PageContainer'
-import {
-  Rocket,
-  ShieldCheck,
-  BrainCircuit,
-  TrendingUp,
-  Handshake,
-  CheckCircle2,
-  ArrowRight,
-  Sparkles,
-} from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
+import { useAuthContext } from '../context/AuthContext'
 
 export default function HomePage() {
-  const pillars = [
-    {
-      icon: ShieldCheck,
-      color: 'from-emerald-500 to-teal-600',
-      title: 'Evidence & Claim Verification',
-      desc: 'Extracted founder claims are automatically cross-checked against pitch decks, financial docs, and evidence registers.',
-    },
-    {
-      icon: BrainCircuit,
-      color: 'from-cyan-500 to-blue-600',
-      title: 'Deterministic Simulation Engine',
-      desc: 'Financial models for Bull, Base, and Bear scenarios calculated with exact Python models for revenue, burn, and runway.',
-    },
-    {
-      icon: TrendingUp,
-      color: 'from-amber-500 to-orange-600',
-      title: 'Red-Team Stress Testing',
-      desc: 'AI agents aggressively challenge founder assumptions, CAC, market size claims, and runway estimates.',
-    },
-    {
-      icon: Handshake,
-      color: 'from-purple-500 to-indigo-600',
-      title: 'Multi-Party Digital Deal Rooms',
-      desc: 'Matchmaking scoring engine connects startups with institutional investors for transparent negotiation with AI Copilot.',
-    },
-  ]
+  const navigate = useNavigate()
+  const { loginAs } = useAuthContext()
 
-  const stats = [
-    { label: 'Microservices', val: '6 Active' },
-    { label: 'Supported AI Providers', val: 'Gemini, Groq, Mock' },
-    { label: 'Simulation Accuracy', val: '100% Deterministic' },
-    { label: 'Roadmap Target', val: '13 Full Phases' },
-  ]
+  const handlePortalEntry = (roleKey, path) => {
+    loginAs(roleKey)
+    navigate(path)
+  }
 
   return (
-    <PageContainer>
+    <div className="space-y-12 py-6">
       {/* Hero Section */}
-      <div className="relative overflow-hidden rounded-2xl border border-slate-800 bg-gradient-to-b from-slate-900/90 via-slate-900/60 to-slate-950 p-8 md:p-12">
-        <div className="absolute -top-24 -right-24 h-72 w-72 rounded-full bg-emerald-500/10 blur-3xl"></div>
-        <div className="absolute -bottom-24 -left-24 h-72 w-72 rounded-full bg-cyan-500/10 blur-3xl"></div>
-
-        <div className="relative z-10 max-w-3xl">
-          <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3.5 py-1 text-xs font-semibold text-emerald-400 mb-6">
-            <Sparkles className="h-3.5 w-3.5" />
-            <span>AI-Powered Startup Investment Marketplace</span>
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#09221a] via-[#0f3d2e] to-[#154e3b] px-6 py-16 sm:px-12 sm:py-20 text-white shadow-2xl border border-emerald-900/60">
+        <div className="relative z-10 max-w-3xl space-y-6">
+          <div className="inline-flex items-center gap-2 rounded-full bg-amber-400/20 px-4 py-1 text-xs font-bold text-amber-300 border border-amber-400/30">
+            <span>✨ Autonomous Multi-Agent Investment Platform</span>
           </div>
 
-          <h1 className="text-4xl font-extrabold tracking-tight text-white sm:text-5xl md:text-6xl leading-[1.15]">
-            Where Founder Claims Meet{' '}
-            <span className="bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 bg-clip-text text-transparent">
-              Rigorous Simulation
-            </span>
+          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black tracking-tight leading-[1.1]">
+            Next-Gen Venture Capital & <span className="text-amber-400">Royalty Marketplace</span>
           </h1>
 
-          <p className="mt-4 text-base sm:text-lg text-slate-300 leading-relaxed max-w-2xl">
-            AI Investment Arena converts founder assumptions into validated business models, stress-tests pitch claims against uploaded evidence, and powers multi-party deal rooms with deterministic AI intelligence.
+          <p className="text-base sm:text-lg text-emerald-100/90 leading-relaxed">
+            FUNDX connects high-conviction startups and accredited angel syndicates. Featuring agentic AI background compliance audits, 12-month mathematical feasibility simulations, and real-time multi-party dealroom negotiation trees.
           </p>
 
-          <div className="mt-8 flex flex-wrap items-center gap-4">
-            <Link to="/dashboard">
-              <Button variant="primary" className="text-sm px-6 py-3 shadow-emerald-500/25">
-                <span>Launch Arena Dashboard</span>
-                <ArrowRight className="h-4 w-4" />
-              </Button>
+          <div className="flex flex-wrap items-center gap-3 pt-2">
+            <Link
+              to="/register"
+              className="rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 px-6 py-3.5 text-xs font-black transition shadow-lg"
+            >
+              Get Started • Register Account
             </Link>
-            <Link to="/startups">
-              <Button variant="outline" className="text-sm px-6 py-3">
-                <Rocket className="h-4 w-4" />
-                <span>Explore Startups</span>
-              </Button>
-            </Link>
-            <Link to="/register">
-              <Button variant="ghost" className="text-sm px-4 py-3">
-                <span>Register Account</span>
-              </Button>
+            <Link
+              to="/login"
+              className="rounded-xl bg-white/10 hover:bg-white/20 text-white border border-white/20 px-6 py-3.5 text-xs font-bold transition backdrop-blur-xs"
+            >
+              Demo Evaluation Logins →
             </Link>
           </div>
         </div>
 
-        {/* Stats Grid */}
-        <div className="mt-12 grid grid-cols-2 gap-4 border-t border-slate-800/80 pt-8 sm:grid-cols-4">
-          {stats.map((s, idx) => (
-            <div key={idx} className="rounded-xl border border-slate-800/60 bg-slate-900/40 p-4">
-              <p className="text-xs font-medium text-slate-400">{s.label}</p>
-              <p className="mt-1 text-lg font-bold text-slate-100">{s.val}</p>
-            </div>
-          ))}
-        </div>
+        {/* Decorative blur glows */}
+        <div className="absolute -right-20 -bottom-20 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute right-1/3 -top-20 w-80 h-80 bg-emerald-400/10 rounded-full blur-3xl pointer-events-none" />
       </div>
 
-      {/* Core Architectural Pillars */}
-      <div className="mt-12">
-        <div className="text-center max-w-xl mx-auto mb-8">
-          <h2 className="text-2xl font-bold text-white sm:text-3xl">Architecture Highlights</h2>
-          <p className="mt-2 text-sm text-slate-400">
-            Separating deterministic calculations from AI reasoning for zero-hallucination analysis.
+      {/* 3 Core Portals Section */}
+      <div>
+        <div className="text-center max-w-2xl mx-auto mb-8">
+          <h2 className="text-2xl font-black text-slate-900 tracking-tight">Platform Portals & Workflows</h2>
+          <p className="text-xs text-slate-500 mt-1">
+            Seamlessly navigate between all three fully wired platform modules.
           </p>
         </div>
 
-        <div className="grid gap-6 sm:grid-cols-2">
-          {pillars.map((p, idx) => {
-            const Icon = p.icon
-            return (
-              <div
-                key={idx}
-                className="glass-panel glass-panel-hover p-6 flex flex-col justify-between"
-              >
-                <div>
-                  <div className={`h-11 w-11 rounded-xl bg-gradient-to-br ${p.color} flex items-center justify-center text-slate-950 shadow-md mb-4`}>
-                    <Icon className="h-6 w-6" />
-                  </div>
-                  <h3 className="text-lg font-bold text-white">{p.title}</h3>
-                  <p className="mt-2 text-sm text-slate-300 leading-relaxed">{p.desc}</p>
-                </div>
-                <div className="mt-4 flex items-center gap-1 text-xs font-semibold text-emerald-400">
-                  <CheckCircle2 className="h-3.5 w-3.5" />
-                  <span>Roadmap Specification Compliant</span>
-                </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {/* Portal 1: Super Admin */}
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs hover:border-amber-400 hover:shadow-md transition flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-100 text-2xl">
+                  👑
+                </span>
+                <span className="rounded-full bg-amber-50 text-amber-900 text-[10px] font-bold px-2.5 py-0.5 border border-amber-200">
+                  Platform Oversight
+                </span>
               </div>
-            )
-          })}
+              <h3 className="font-bold text-lg text-slate-900">Super Admin Portal</h3>
+              <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+                Platform-wide governance: supervise startups and investors, monitor the aggregated deal marketplace, inspect statutory documents, and run AI re-verifications.
+              </p>
+
+              <ul className="mt-4 space-y-1.5 text-xs text-slate-600">
+                <li className="flex items-center gap-1.5">
+                  <span className="text-amber-500">✦</span> <strong>Super Admin Dashboard:</strong> Global metrics
+                </li>
+                <li className="flex items-center gap-1.5">
+                  <span className="text-amber-500">✦</span> <strong>Startups & Investors:</strong> Directories
+                </li>
+                <li className="flex items-center gap-1.5">
+                  <span className="text-amber-500">✦</span> <strong>Deal Marketplace:</strong> Ongoing & closed
+                </li>
+                <li className="flex items-center gap-1.5">
+                  <span className="text-amber-500">✦</span> <strong>Edit Company:</strong> GST & Inc re-audit
+                </li>
+              </ul>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => handlePortalEntry('admin', '/admin/dashboard')}
+              className="mt-6 w-full rounded-xl bg-slate-900 hover:bg-slate-800 text-white py-2.5 text-xs font-bold transition shadow-xs cursor-pointer"
+            >
+              Enter Super Admin Portal →
+            </button>
+          </div>
+
+          {/* Portal 2: Startup */}
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs hover:border-emerald-400 hover:shadow-md transition flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-100 text-2xl">
+                  🚀
+                </span>
+                <span className="rounded-full bg-emerald-50 text-emerald-900 text-[10px] font-bold px-2.5 py-0.5 border border-emerald-200">
+                  Founder Hub
+                </span>
+              </div>
+              <h3 className="font-bold text-lg text-slate-900">Startup Portal</h3>
+              <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+                Register with GST & Incorporation credentials, verify your company with the AI Verifier, configure hybrid equity + royalty deals, and run market simulations.
+              </p>
+
+              <ul className="mt-4 space-y-1.5 text-xs text-slate-600">
+                <li className="flex items-center gap-1.5">
+                  <span className="text-emerald-600">✓</span> <strong>AI Verifier:</strong> Background check & badge
+                </li>
+                <li className="flex items-center gap-1.5">
+                  <span className="text-emerald-600">✓</span> <strong>Deal Creation:</strong> Thesis upload & AI analysis
+                </li>
+                <li className="flex items-center gap-1.5">
+                  <span className="text-emerald-600">✓</span> <strong>Market Simulation:</strong> Bull, base, bear
+                </li>
+                <li className="flex items-center gap-1.5">
+                  <span className="text-emerald-600">✓</span> <strong>Dealroom:</strong> Investor offers & closing
+                </li>
+              </ul>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => handlePortalEntry('startup', '/startup/dashboard')}
+              className="mt-6 w-full rounded-xl bg-[#0f3d2e] hover:bg-[#165540] text-white py-2.5 text-xs font-bold transition shadow-xs cursor-pointer"
+            >
+              Enter Startup Portal →
+            </button>
+          </div>
+
+          {/* Portal 3: Investor */}
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs hover:border-cyan-400 hover:shadow-md transition flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-100 text-2xl">
+                  💼
+                </span>
+                <span className="rounded-full bg-cyan-50 text-cyan-900 text-[10px] font-bold px-2.5 py-0.5 border border-cyan-200">
+                  Angel / VC Syndicate
+                </span>
+              </div>
+              <h3 className="font-bold text-lg text-slate-900">Investor Portal</h3>
+              <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+                Browse listed deals with rich filters, review AI feasibility scores, upload CV for AI accreditation, and enter the Dealroom to issue and negotiate term sheets.
+              </p>
+
+              <ul className="mt-4 space-y-1.5 text-xs text-slate-600">
+                <li className="flex items-center gap-1.5">
+                  <span className="text-cyan-600">✦</span> <strong>CV Verification Gating:</strong> Required to negotiate
+                </li>
+                <li className="flex items-center gap-1.5">
+                  <span className="text-cyan-600">✦</span> <strong>Listed Deals:</strong> Deep filters & simulation preview
+                </li>
+                <li className="flex items-center gap-1.5">
+                  <span className="text-cyan-600">✦</span> <strong>Negotiation Tree:</strong> Visual offer progression
+                </li>
+                <li className="flex items-center gap-1.5">
+                  <span className="text-cyan-600">✦</span> <strong>Closed Deals:</strong> Portfolio tracker
+                </li>
+              </ul>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => handlePortalEntry('investor', '/investor/dashboard')}
+              className="mt-6 w-full rounded-xl bg-slate-900 hover:bg-slate-800 text-white py-2.5 text-xs font-bold transition shadow-xs cursor-pointer"
+            >
+              Enter Investor Portal →
+            </button>
+          </div>
         </div>
       </div>
-    </PageContainer>
+    </div>
   )
 }

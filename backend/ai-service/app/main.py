@@ -26,6 +26,8 @@ from app.simulation.simulator import run_scenarios  # noqa: E402
 from app.workflows.investor_analysis import run_investor_analysis  # noqa: E402
 from app.workflows.negotiation import run_negotiation  # noqa: E402
 from app.workflows.startup_analysis import run_startup_analysis  # noqa: E402
+from app.agents.verifier_agent import run_startup_verifier, run_investor_cv_verifier  # noqa: E402
+from app.workflows.thesis_analyzer import run_thesis_analysis  # noqa: E402
 
 SERVICE_NAME = os.getenv("SERVICE_NAME", "ai-service")
 
@@ -129,3 +131,19 @@ async def demo_sample() -> dict[str, Any]:
             "check_size_max": 1_500_000,
         },
     }
+
+
+@app.post("/ai/verify/startup")
+async def verify_startup_endpoint(payload: dict[str, Any]) -> dict[str, Any]:
+    return await run_startup_verifier(payload)
+
+
+@app.post("/ai/verify/investor")
+async def verify_investor_endpoint(payload: dict[str, Any]) -> dict[str, Any]:
+    return await run_investor_cv_verifier(payload)
+
+
+@app.post("/ai/analyze-thesis")
+async def analyze_thesis_endpoint(payload: dict[str, Any]) -> dict[str, Any]:
+    return await run_thesis_analysis(payload)
+
