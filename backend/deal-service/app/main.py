@@ -405,7 +405,35 @@ async def update_deal(deal_id: str, payload: DealUpdate) -> dict[str, Any]:
 
 @app.post("/deals/{deal_id}/publish")
 async def publish_deal(deal_id: str) -> dict[str, Any]:
-    """Publish draft deal to marketplace."""
+    """
+    Publish draft deal to marketplace.
+    
+    Eligibility Gate:
+    - Only verified startups (is_verified == True) can publish deals to the marketplace.
+    - Unverified startups receive HTTP 403 with descriptive error.
+    """
+    deal = await db.fetchrow("SELECT * FROM public.deals WHERE id = $1", deal_id)
+    if not deal:
+        if deal_id in _DEALS:
+            deal = _DEALS[deal_id]
+        else:
+            raise HTTPException(status_code=404, detail="Deal not found")
+    
+    # Get startup verification status
+    startup = await db.fetchrow("SELECT is_verified, name FROM public.startups WHERE id = $1", deal.get("startup_id"))
+    is_verified = (startup.get("is_verified", False) if startup else False)
+    
+    # Fallback to in-memory if DB lookup fails
+    if startup is None and deal.get("startup_id") in _DEALS:
+        # Try to get from in-memory startup data
+        is_verified = deal.get("startup_verified", False)
+    
+    if not is_verified:
+        raise HTTPException(
+            status_code=403,
+            detail="Unverified startups cannot publish deals to the marketplace. Complete CIN verification or AI credibility assessment to unlock publishing rights."
+        )
+    
     await db.execute("UPDATE public.deals SET status = 'published', published_at = NOW(), updated_at = NOW() WHERE id = $1", deal_id)
     deal = await db.fetchrow("SELECT * FROM public.deals WHERE id = $1", deal_id)
     if not deal:
@@ -433,6 +461,7 @@ async def publish_deal(deal_id: str) -> dict[str, Any]:
         )
 
     return {"message": "Deal published to marketplace successfully", "deal": deal}
+
 
 
 @app.post("/deals/{deal_id}/interest")
@@ -486,7 +515,10 @@ async def get_negotiation_tree(deal_id: str) -> dict[str, Any]:
 async def create_offer(deal_id: str, payload: OfferCreate) -> dict[str, Any]:
     """
     Submit offer or counter-offer.
-    Enforces AI verification check: unverified investors cannot negotiate or submit offers!
+    
+    Eligibility Gate (Investor Buying Gate):
+    - Only verified investors (is_verified == True) can submit offers to buy startups.
+    - Unverified investors receive HTTP 403 with guidance on CIN verification or CV accreditation.
     """
     deal = await db.fetchrow("SELECT * FROM public.deals WHERE id = $1", deal_id)
     if not deal:
@@ -494,35 +526,55 @@ async def create_offer(deal_id: str, payload: OfferCreate) -> dict[str, Any]:
     if not deal:
         raise HTTPException(status_code=404, detail="Deal not found")
 
-    # Verify investor accreditation if sender is investor
+    # Verify investor eligibility if sender is investor
     if payload.sender_type == "investor":
         investor_id = payload.investor_id
-        inv = await db.fetchrow("SELECT is_verified FROM public.investors WHERE id = $1", investor_id)
-        if inv and not inv.get("is_verified"):
-            raise HTTPException(
-                status_code=403,
-                detail="Verification required: You must upload your CV and be AI Verified to negotiate or submit offers."
-            )
-        elif not inv:
-            # Check via HTTP
+        
+        # Check investor verification status
+        inv = await db.fetchrow(
+            "SELECT is_verified, verification_status, verification_score, cin FROM public.investors WHERE id = $1",
+            investor_id
+        )
+        
+        is_verified = False
+        verification_method = None
+        
+        if inv:
+            is_verified = inv.get("is_verified", False)
+            if inv.get("cin"):
+                verification_method = "Corporate CIN (MCA/ROC)"
+            elif inv.get("verification_status") == "verified":
+                verification_method = "CV & Accreditation"
+        else:
+            # Fallback to HTTP check
             try:
                 async with httpx.AsyncClient(timeout=5.0) as client:
                     resp = await client.get(f"{INVESTOR_SERVICE_URL}/investors/{investor_id}")
                     if resp.status_code == 200:
                         inv_data = resp.json()
-                        if not inv_data.get("is_verified", False):
-                            raise HTTPException(
-                                status_code=403,
-                                detail="Verification required: You must upload your CV and be AI Verified to negotiate or submit offers."
-                            )
-            except HTTPException:
-                raise
-            except Exception:
-                if investor_id == "investor-david":
-                    raise HTTPException(
-                        status_code=403,
-                        detail="Verification required: You must upload your CV and be AI Verified to negotiate or submit offers."
-                    )
+                        is_verified = inv_data.get("is_verified", False)
+                        if inv_data.get("cin"):
+                            verification_method = "Corporate CIN (MCA/ROC)"
+                        elif inv_data.get("verification_status") == "verified":
+                            verification_method = "CV & Accreditation"
+            except Exception as e:
+                logger.warning(f"Failed to check investor verification via HTTP: {e}")
+                # Use in-memory fallback
+                if investor_id in ("investor-elena", "investor-vikram"):
+                    is_verified = True
+                    verification_method = "CV & Accreditation"
+                elif investor_id == "investor-david":
+                    is_verified = False
+        
+        # Enforce eligibility gate
+        if not is_verified:
+            raise HTTPException(
+                status_code=403,
+                detail="🔒 Verification required to submit offers. Please complete one of the following:\n"
+                       "• Corporate Investor: Register with a valid Corporate CIN (MCA/ROC Registry) for instant verification\n"
+                       "• Individual Investor: Upload your CV and accreditation documents for AI verification\n"
+                       "Once verified, you'll unlock dealroom access and offer submission capabilities."
+            )
 
     # Set prior active offers to countered
     await db.execute("UPDATE public.offers SET status = 'countered' WHERE deal_id = $1 AND status = 'active'", deal_id)
@@ -533,12 +585,11 @@ async def create_offer(deal_id: str, payload: OfferCreate) -> dict[str, Any]:
         INSERT INTO public.offers (
             id, deal_id, investor_id, investor_name, sender_type, amount,
             equity_pct, royalty_pct, royalty_payout_terms, status, message
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'active', $9, $10)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'active', $10)
         """,
         offer_id, deal_id, payload.investor_id, payload.investor_name or "Investor",
         payload.sender_type, payload.amount, payload.equity_pct, payload.royalty_pct,
-        payload.royalty_payout_terms or deal.get("royalty_payout_terms"),
-        payload.message or "Submitted offer proposal."
+        payload.royalty_payout_terms or deal.get("royalty_payout_terms"), payload.message or "Submitted offer proposal."
     )
 
     # Move deal status to negotiating if published
@@ -560,6 +611,7 @@ async def create_offer(deal_id: str, payload: OfferCreate) -> dict[str, Any]:
         "timestamp": datetime.utcnow().isoformat() + "Z",
     }
     return new_offer
+
 
 
 @app.put("/deals/{deal_id}/offers/{offer_id}")

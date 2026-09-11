@@ -94,10 +94,17 @@ export default function StartupsPage() {
                 <span className="rounded bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-400 border border-emerald-500/20">
                   {s.industry || 'FinTech'}
                 </span>
-                <span className="rounded bg-cyan-500/10 px-2 py-0.5 text-[11px] font-medium text-cyan-400 border border-cyan-500/20 flex items-center gap-1">
-                  <ShieldCheck className="h-3 w-3" />
-                  Evidence Verified
-                </span>
+                {s.is_verified && (
+                  <span className="rounded bg-cyan-500/10 px-2 py-0.5 text-[11px] font-medium text-cyan-400 border border-cyan-500/20 flex items-center gap-1">
+                    <ShieldCheck className="h-3 w-3" />
+                    CIN Verified
+                  </span>
+                )}
+                {!s.is_verified && (
+                  <span className="rounded bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-400 border border-amber-500/20">
+                    Pending Verification
+                  </span>
+                )}
               </div>
             </div>
 

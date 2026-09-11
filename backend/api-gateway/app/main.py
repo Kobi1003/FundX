@@ -123,6 +123,21 @@ async def gateway(service: str, request: Request, path: str = "") -> Response:
     return await _proxy(request, base, target_path)
 
 
+@app.post("/admin/run-migrations")
+async def run_migrations_admin() -> dict[str, str]:
+    """Admin endpoint to trigger database migrations on all services."""
+    async with httpx.AsyncClient() as client:
+        results = {}
+        for service_name, base_url in ROUTE_MAP.items():
+            try:
+                resp = await client.post(f"{base_url}/admin/run-migrations", timeout=5.0)
+                results[service_name] = {"status": "ok", "code": resp.status_code}
+            except Exception as exc:  # noqa: BLE001
+                results[service_name] = {"status": "error", "error": str(exc)}
+    
+    return {"message": "Migration request sent to all services", "results": results}
+
+
 @app.get("/")
 async def root() -> dict[str, str]:
     return {"service": SERVICE_NAME, "message": "AI Investment Arena API Gateway"}

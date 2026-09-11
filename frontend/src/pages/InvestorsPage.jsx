@@ -6,7 +6,7 @@ import Button from '../components/Button'
 import LoadingState from '../components/LoadingState'
 import ErrorState from '../components/ErrorState'
 import { api } from '../services/api'
-import { Users, Building, DollarSign, Target, Sparkles, ArrowRight } from 'lucide-react'
+import { Users, Building, DollarSign, Target, Sparkles, ArrowRight, ShieldCheck } from 'lucide-react'
 
 export default function InvestorsPage() {
   const [items, setItems] = useState([])
@@ -77,10 +77,19 @@ export default function InvestorsPage() {
             </div>
 
             <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between">
-              <span className="text-[11px] text-emerald-400 flex items-center gap-1 font-semibold">
-                <Sparkles className="h-3 w-3" />
-                Matching Score Ready
-              </span>
+              <div className="flex items-center gap-2">
+                {inv.is_verified && (
+                  <span className="text-[11px] text-cyan-400 flex items-center gap-1 font-semibold">
+                    <ShieldCheck className="h-3 w-3" />
+                    CIN Verified
+                  </span>
+                )}
+                {!inv.is_verified && (
+                  <span className="text-[11px] text-slate-400 font-semibold">
+                    Status: Pending
+                  </span>
+                )}
+              </div>
               <Link to={`/investors/${inv.id}`}>
                 <Button variant="outline" className="text-xs px-3 py-1">
                   <span>View Thesis</span>
