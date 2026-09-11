@@ -132,6 +132,17 @@ export const api = {
     request(`/api/investors/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   uploadInvestorCv: (id, body) =>
     request(`/api/investors/${id}/upload-cv`, { method: 'POST', body: JSON.stringify(body) }),
+  uploadInvestorCvFile: (id, file) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return fetch(`${API_BASE}/api/investors/${id}/upload-cv-file`, {
+      method: 'POST',
+      body: formData,
+    }).then((res) => {
+      if (!res.ok) throw new Error('PDF file upload failed')
+      return res.json()
+    })
+  },
   verifyInvestor: (id) =>
     request(`/api/investors/${id}/verify`, { method: 'POST' }),
   getInvestorPreferences: (id) => request(`/api/investors/${id}/preferences`),
