@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import logging
 import os
 import sys
 import uuid
@@ -15,13 +17,16 @@ sys.path.insert(0, "/app")
 
 from shared.neo4j_client import health_check as neo4j_health  # noqa: E402
 from shared.supabase_client import supabase_configured  # noqa: E402
+from shared import db  # noqa: E402
+
+logger = logging.getLogger("fundx.investor-service")
 
 SERVICE_NAME = os.getenv("SERVICE_NAME", "investor-service")
 AI_SERVICE_URL = os.getenv("AI_SERVICE_URL", "http://ai-service:8005")
 
 app = FastAPI(title="Investor Service", version="0.1.0")
 
-# Initial realistic seed data
+# In-memory fallback
 _INVESTORS: dict[str, dict[str, Any]] = {
     "investor-elena": {
         "id": "investor-elena",
@@ -134,6 +139,7 @@ _PREFERENCES: dict[str, dict[str, Any]] = {
 
 
 class InvestorCreate(BaseModel):
+    id: str | None = None
     display_name: str = Field(..., min_length=1)
     email: str | None = None
     firm: str | None = None
@@ -167,11 +173,18 @@ class DocumentMeta(BaseModel):
     storage_path: str | None = None
 
 
+@app.on_event("startup")
+async def on_startup():
+    await db.get_pool()
+
+
 @app.get("/health")
 async def health() -> dict[str, Any]:
+    pool = await db.get_pool()
     return {
         "status": "ok",
         "service": SERVICE_NAME,
+        "database_connected": pool is not None,
         "supabase_configured": supabase_configured(),
         "neo4j": neo4j_health(),
     }
@@ -179,12 +192,31 @@ async def health() -> dict[str, Any]:
 
 @app.get("/investors")
 async def list_investors() -> list[dict[str, Any]]:
+    rows = await db.fetch("SELECT * FROM public.investors ORDER BY created_at DESC")
+    if rows:
+        return rows
     return list(_INVESTORS.values())
 
 
 @app.post("/investors")
 async def create_investor(payload: InvestorCreate) -> dict[str, Any]:
-    investor_id = f"investor-{uuid.uuid4().hex[:8]}"
+    investor_id = payload.id or f"investor-{uuid.uuid4().hex[:8]}"
+
+    await db.execute(
+        """
+        INSERT INTO public.investors (
+            id, display_name, email, firm, bio, thesis, is_verified, verification_status, verification_score
+        ) VALUES (
+            $1, $2, $3, $4, $5, $6, FALSE, 'unverified', 40
+        )
+        ON CONFLICT (id) DO UPDATE SET
+            display_name = EXCLUDED.display_name,
+            firm = COALESCE(EXCLUDED.firm, investors.firm)
+        """,
+        investor_id, payload.display_name, payload.email, payload.firm or "Private Angel",
+        payload.bio, payload.thesis
+    )
+
     row = {
         "id": investor_id,
         "is_verified": False,
@@ -197,57 +229,70 @@ async def create_investor(payload: InvestorCreate) -> dict[str, Any]:
         **payload.model_dump(),
     }
     _INVESTORS[investor_id] = row
-    _DOCUMENTS[investor_id] = []
-    _PREFERENCES[investor_id] = PreferencesUpdate().model_dump()
     return row
 
 
 @app.get("/investors/{investor_id}")
 async def get_investor(investor_id: str) -> dict[str, Any]:
-    if investor_id not in _INVESTORS:
-        raise HTTPException(status_code=404, detail="Investor not found")
-    inv = dict(_INVESTORS[investor_id])
-    inv["documents"] = _DOCUMENTS.get(investor_id, [])
-    inv["preferences"] = _PREFERENCES.get(investor_id, {})
-    return inv
+    row = await db.fetchrow("SELECT * FROM public.investors WHERE id = $1", investor_id)
+    if row:
+        pref = await db.fetchrow("SELECT * FROM public.investment_preferences WHERE investor_id = $1", investor_id)
+        row["preferences"] = pref or _PREFERENCES.get(investor_id, {})
+        row["documents"] = _DOCUMENTS.get(investor_id, [])
+        return row
+
+    if investor_id in _INVESTORS:
+        inv = dict(_INVESTORS[investor_id])
+        inv["documents"] = _DOCUMENTS.get(investor_id, [])
+        inv["preferences"] = _PREFERENCES.get(investor_id, {})
+        return inv
+
+    raise HTTPException(status_code=404, detail="Investor not found")
 
 
 @app.put("/investors/{investor_id}")
 async def update_investor(investor_id: str, payload: InvestorUpdate) -> dict[str, Any]:
-    if investor_id not in _INVESTORS:
-        raise HTTPException(status_code=404, detail="Investor not found")
-    
-    current = _INVESTORS[investor_id]
     updates = {k: v for k, v in payload.model_dump().items() if v is not None}
     
-    if "cv_filename" in updates and updates["cv_filename"]:
-        docs = _DOCUMENTS.setdefault(investor_id, [])
-        if not any(d.get("filename") == updates["cv_filename"] for d in docs):
-            docs.append({
-                "id": str(uuid.uuid4()),
-                "filename": updates["cv_filename"],
-                "doc_type": "cv",
-                "storage_path": f"docs/{updates['cv_filename']}",
-            })
+    existing = await db.fetchrow("SELECT * FROM public.investors WHERE id = $1", investor_id)
+    if existing:
+        set_clauses = []
+        args = [investor_id]
+        idx = 2
+        for k, v in updates.items():
+            set_clauses.append(f"{k} = ${idx}")
+            args.append(v)
+            idx += 1
+        if set_clauses:
+            query = f"UPDATE public.investors SET {', '.join(set_clauses)}, updated_at = NOW() WHERE id = $1 RETURNING *"
+            updated = await db.fetchrow(query, *args)
+            if updated:
+                return updated
 
-    current.update(updates)
-    current["updated_at"] = datetime.utcnow().isoformat() + "Z"
-    _INVESTORS[investor_id] = current
-    return current
+    if investor_id in _INVESTORS:
+        current = _INVESTORS[investor_id]
+        current.update(updates)
+        current["updated_at"] = datetime.utcnow().isoformat() + "Z"
+        _INVESTORS[investor_id] = current
+        return current
+
+    raise HTTPException(status_code=404, detail="Investor not found")
 
 
 @app.post("/investors/{investor_id}/upload-cv")
 async def upload_cv(investor_id: str, payload: dict[str, Any]) -> dict[str, Any]:
-    if investor_id not in _INVESTORS:
-        raise HTTPException(status_code=404, detail="Investor not found")
-    
-    inv = _INVESTORS[investor_id]
     filename = payload.get("filename") or "Investor_Executive_CV.pdf"
     cv_text = payload.get("cv_text") or "Executive CV credentials uploaded."
-    
-    inv["cv_filename"] = filename
-    inv["cv_text"] = cv_text
-    
+
+    await db.execute(
+        "UPDATE public.investors SET cv_filename = $2, cv_text = $3, updated_at = NOW() WHERE id = $1",
+        investor_id, filename, cv_text
+    )
+
+    if investor_id in _INVESTORS:
+        _INVESTORS[investor_id]["cv_filename"] = filename
+        _INVESTORS[investor_id]["cv_text"] = cv_text
+
     docs = _DOCUMENTS.setdefault(investor_id, [])
     docs.append({
         "id": str(uuid.uuid4()),
@@ -255,18 +300,19 @@ async def upload_cv(investor_id: str, payload: dict[str, Any]) -> dict[str, Any]
         "doc_type": "cv",
         "storage_path": f"docs/{filename}",
     })
-    
-    _INVESTORS[investor_id] = inv
+
     return {"message": "CV uploaded successfully", "cv_filename": filename}
 
 
 @app.post("/investors/{investor_id}/verify")
 async def verify_investor(investor_id: str) -> dict[str, Any]:
     """Run AI CV Verification for investor."""
-    if investor_id not in _INVESTORS:
+    inv = await db.fetchrow("SELECT * FROM public.investors WHERE id = $1", investor_id)
+    if not inv:
+        inv = _INVESTORS.get(investor_id)
+    if not inv:
         raise HTTPException(status_code=404, detail="Investor not found")
-    
-    inv = _INVESTORS[investor_id]
+
     verify_payload = {
         "display_name": inv.get("display_name"),
         "firm": inv.get("firm"),
@@ -281,19 +327,20 @@ async def verify_investor(investor_id: str) -> dict[str, Any]:
             resp = await client.post(f"{AI_SERVICE_URL}/ai/verify/investor", json=verify_payload)
             if resp.status_code == 200:
                 report = resp.json()
-    except Exception:  # noqa: BLE001
+    except Exception:
         pass
 
     if not report:
         has_cv = bool(inv.get("cv_filename") or inv.get("cv_text"))
-        score = 88 if has_cv else 45
+        score = 90 if has_cv else 45
+        is_ver = score >= 70
         report = {
-            "status": "verified" if score >= 70 else "unverified",
-            "is_verified": score >= 70,
+            "status": "verified" if is_ver else "unverified",
+            "is_verified": is_ver,
             "score": score,
-            "verified_badge": "AI Verified" if score >= 70 else "Verification Required",
-            "badges": ["AI Verified Investor", "Dealroom Authorized"] if score >= 70 else [],
-            "summary": f"Investor verification for {inv.get('display_name')}. Score: {score}/100.",
+            "verified_badge": "AI Verified" if is_ver else "Verification Required",
+            "badges": ["AI Verified Investor", "Dealroom Authorized"] if is_ver else [],
+            "summary": f"Investor verification for {inv.get('display_name')}. Credibility score: {score}/100.",
             "checks": [
                 {"check": "Curriculum Vitae & Experience", "status": "PASS" if has_cv else "MISSING", "detail": f"CV: {inv.get('cv_filename') or 'Pending'}"},
                 {"check": "Accreditation Status", "status": "PASS" if has_cv else "PENDING", "detail": "Investor status confirmed"},
@@ -302,33 +349,45 @@ async def verify_investor(investor_id: str) -> dict[str, Any]:
             "timestamp": datetime.utcnow().isoformat() + "Z",
         }
 
-    inv["is_verified"] = report.get("is_verified", False)
-    inv["verification_status"] = "verified" if inv["is_verified"] else "unverified"
-    inv["verification_score"] = report.get("score", 50)
-    inv["verification_report"] = report
-    inv["updated_at"] = datetime.utcnow().isoformat() + "Z"
-    _INVESTORS[investor_id] = inv
+    is_verified = report.get("is_verified", False)
+    v_status = "verified" if is_verified else "unverified"
+    v_score = report.get("score", 50)
+
+    # Persist in PostgreSQL
+    await db.execute(
+        """
+        UPDATE public.investors
+        SET is_verified = $2, verification_status = $3, verification_score = $4, verification_report = $5::jsonb, updated_at = NOW()
+        WHERE id = $1
+        """,
+        investor_id, is_verified, v_status, v_score, json.dumps(report)
+    )
+
+    # Also update profile is_verified
+    await db.execute("UPDATE public.profiles SET is_verified = $2 WHERE investor_id = $1 OR id = $1", investor_id, is_verified)
+
+    if investor_id in _INVESTORS:
+        _INVESTORS[investor_id]["is_verified"] = is_verified
+        _INVESTORS[investor_id]["verification_status"] = v_status
+        _INVESTORS[investor_id]["verification_score"] = v_score
+        _INVESTORS[investor_id]["verification_report"] = report
 
     return {
         "investor_id": investor_id,
-        "is_verified": inv["is_verified"],
-        "verification_status": inv["verification_status"],
-        "verification_score": inv["verification_score"],
+        "is_verified": is_verified,
+        "verification_status": v_status,
+        "verification_score": v_score,
         "report": report,
     }
 
 
 @app.get("/investors/{investor_id}/documents")
 async def list_documents(investor_id: str) -> list[dict[str, Any]]:
-    if investor_id not in _INVESTORS:
-        raise HTTPException(status_code=404, detail="Investor not found")
     return _DOCUMENTS.get(investor_id, [])
 
 
 @app.post("/investors/{investor_id}/documents")
 async def add_document(investor_id: str, payload: DocumentMeta) -> dict[str, Any]:
-    if investor_id not in _INVESTORS:
-        raise HTTPException(status_code=404, detail="Investor not found")
     doc = {"id": str(uuid.uuid4()), **payload.model_dump()}
     _DOCUMENTS.setdefault(investor_id, []).append(doc)
     return doc
@@ -336,24 +395,41 @@ async def add_document(investor_id: str, payload: DocumentMeta) -> dict[str, Any
 
 @app.get("/investors/{investor_id}/preferences")
 async def get_preferences(investor_id: str) -> dict[str, Any]:
-    if investor_id not in _INVESTORS:
-        raise HTTPException(status_code=404, detail="Investor not found")
+    pref = await db.fetchrow("SELECT * FROM public.investment_preferences WHERE investor_id = $1", investor_id)
+    if pref:
+        return {"investor_id": investor_id, **pref}
     return {"investor_id": investor_id, **_PREFERENCES.get(investor_id, {})}
 
 
 @app.put("/investors/{investor_id}/preferences")
 async def update_preferences(investor_id: str, payload: PreferencesUpdate) -> dict[str, Any]:
-    if investor_id not in _INVESTORS:
-        raise HTTPException(status_code=404, detail="Investor not found")
+    pref_id = f"pref-{investor_id}"
+    await db.execute(
+        """
+        INSERT INTO public.investment_preferences (
+            id, investor_id, industries, stages, check_size_min, check_size_max, geographies, notes
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        ON CONFLICT (id) DO UPDATE SET
+            industries = EXCLUDED.industries,
+            stages = EXCLUDED.stages,
+            check_size_min = EXCLUDED.check_size_min,
+            check_size_max = EXCLUDED.check_size_max,
+            geographies = EXCLUDED.geographies,
+            notes = EXCLUDED.notes,
+            updated_at = NOW()
+        """,
+        pref_id, investor_id, payload.industries, payload.stages,
+        payload.check_size_min, payload.check_size_max, payload.geographies, payload.notes
+    )
     _PREFERENCES[investor_id] = payload.model_dump()
     return {"investor_id": investor_id, **payload.model_dump()}
 
 
 @app.get("/investors/{investor_id}/assessment")
 async def get_assessment(investor_id: str) -> dict[str, Any]:
-    if investor_id not in _INVESTORS:
-        raise HTTPException(status_code=404, detail="Investor not found")
-    inv = _INVESTORS[investor_id]
+    inv = await db.fetchrow("SELECT is_verified, verification_status, verification_report FROM public.investors WHERE id = $1", investor_id)
+    if not inv:
+        inv = _INVESTORS.get(investor_id, {})
     return {
         "investor_id": investor_id,
         "is_verified": inv.get("is_verified", False),

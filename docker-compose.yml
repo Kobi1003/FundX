@@ -1,9 +1,44 @@
 # AI Investment Arena
 #
-# Architecture: React → API Gateway → Microservices → Supabase + Neo4j → AI (Google ADK)
-# Supabase = managed Auth/Postgres/Storage (hosted). Not the application backend.
+# Architecture: React → API Gateway → Microservices → PostgreSQL (Persistent DB) + Neo4j → AI (Google ADK)
 
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: fundx-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-fundx_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-fundx_password}
+      POSTGRES_DB: ${POSTGRES_DB:-fundx_db}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/001_init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fundx_user -d fundx_db"]
+      interval: 4s
+      timeout: 4s
+      retries: 10
+      start_period: 5s
+    networks:
+      - fundx
+
+  adminer:
+    image: adminer:4
+    container_name: fundx-adminer
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - fundx
+
   neo4j:
     image: neo4j:5-community
     container_name: fundx-neo4j
@@ -33,10 +68,13 @@ services:
     environment:
       SERVICE_NAME: user-service
       PORT: 8001
+      DATABASE_URL: postgresql://fundx_user:fundx_password@postgres:5432/fundx_db
     ports:
       - "8001:8001"
     depends_on:
       neo4j:
+        condition: service_healthy
+      postgres:
         condition: service_healthy
     networks:
       - fundx
@@ -50,10 +88,13 @@ services:
     environment:
       SERVICE_NAME: startup-service
       PORT: 8002
+      DATABASE_URL: postgresql://fundx_user:fundx_password@postgres:5432/fundx_db
     ports:
       - "8002:8002"
     depends_on:
       neo4j:
+        condition: service_healthy
+      postgres:
         condition: service_healthy
     networks:
       - fundx
@@ -67,10 +108,13 @@ services:
     environment:
       SERVICE_NAME: investor-service
       PORT: 8003
+      DATABASE_URL: postgresql://fundx_user:fundx_password@postgres:5432/fundx_db
     ports:
       - "8003:8003"
     depends_on:
       neo4j:
+        condition: service_healthy
+      postgres:
         condition: service_healthy
     networks:
       - fundx
@@ -84,10 +128,13 @@ services:
     environment:
       SERVICE_NAME: deal-service
       PORT: 8004
+      DATABASE_URL: postgresql://fundx_user:fundx_password@postgres:5432/fundx_db
     ports:
       - "8004:8004"
     depends_on:
       neo4j:
+        condition: service_healthy
+      postgres:
         condition: service_healthy
     networks:
       - fundx
@@ -155,6 +202,7 @@ services:
 volumes:
   neo4j_data:
   neo4j_logs:
+  postgres_data:
 
 networks:
   fundx:

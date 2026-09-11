@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
 import uuid
@@ -16,6 +17,9 @@ sys.path.insert(0, "/app")
 from shared.auth import optional_current_user, require_current_user  # noqa: E402
 from shared.neo4j_client import health_check as neo4j_health  # noqa: E402
 from shared.supabase_client import supabase_configured  # noqa: E402
+from shared import db  # noqa: E402
+
+logger = logging.getLogger("fundx.user-service")
 
 SERVICE_NAME = os.getenv("SERVICE_NAME", "user-service")
 STARTUP_SERVICE_URL = os.getenv("STARTUP_SERVICE_URL", "http://startup-service:8002")
@@ -23,7 +27,7 @@ INVESTOR_SERVICE_URL = os.getenv("INVESTOR_SERVICE_URL", "http://investor-servic
 
 app = FastAPI(title="User Service", version="0.1.0")
 
-# Initial realistic seed profiles
+# In-memory fallback
 _PROFILES: dict[str, dict[str, Any]] = {
     "admin-user": {
         "id": "admin-user",
@@ -71,8 +75,8 @@ class StartupRegisterRequest(BaseModel):
     name: str = Field(..., min_length=1)
     email: str = Field(..., min_length=3)
     password: str = Field(..., min_length=4)
-    industry: str
-    gst_number: str
+    industry: str = "Technology"
+    gst_number: str = ""
     incorporation_cert: str = "INCORPORATION_CERTIFICATE.pdf"
     role: str = "startup"
 
@@ -96,11 +100,18 @@ class ProfileCreate(BaseModel):
     email: str | None = None
 
 
+@app.on_event("startup")
+async def on_startup():
+    await db.get_pool()
+
+
 @app.get("/health")
 async def health() -> dict[str, Any]:
+    pool = await db.get_pool()
     return {
         "status": "ok",
         "service": SERVICE_NAME,
+        "database_connected": pool is not None,
         "supabase_configured": supabase_configured(),
         "neo4j": neo4j_health(),
     }
@@ -109,6 +120,9 @@ async def health() -> dict[str, Any]:
 @app.get("/users")
 @app.get("/list")
 async def list_users() -> list[dict[str, Any]]:
+    rows = await db.fetch("SELECT * FROM public.profiles ORDER BY created_at ASC")
+    if rows:
+        return rows
     return list(_PROFILES.values())
 
 
@@ -117,14 +131,24 @@ async def get_profile(
     user: Annotated[dict[str, Any] | None, Depends(optional_current_user)],
 ) -> dict[str, Any]:
     user_id = (user or {}).get("sub")
-    if user_id and user_id in _PROFILES:
-        return _PROFILES[user_id]
-    # Default active profile
+    if user_id:
+        row = await db.fetchrow("SELECT * FROM public.profiles WHERE id = $1", user_id)
+        if row:
+            return row
+        if user_id in _PROFILES:
+            return _PROFILES[user_id]
+    # Default active profile is admin-user
+    row = await db.fetchrow("SELECT * FROM public.profiles WHERE id = 'admin-user'")
+    if row:
+        return row
     return _PROFILES["admin-user"]
 
 
 @app.get("/profile/{user_id}")
 async def get_profile_by_id(user_id: str) -> dict[str, Any]:
+    row = await db.fetchrow("SELECT * FROM public.profiles WHERE id = $1", user_id)
+    if row:
+        return row
     if user_id in _PROFILES:
         return _PROFILES[user_id]
     raise HTTPException(status_code=404, detail="User not found")
@@ -132,14 +156,19 @@ async def get_profile_by_id(user_id: str) -> dict[str, Any]:
 
 @app.post("/register")
 async def register(payload: dict[str, Any]) -> dict[str, Any]:
-    role = payload.get("role", "startup").lower()
-    email = payload.get("email", "").lower().strip()
-    name = payload.get("name") or payload.get("full_name") or "User"
+    role = (payload.get("role") or "startup").lower().strip()
+    email = (payload.get("email") or "").lower().strip()
+    name = (payload.get("name") or payload.get("full_name") or "User").strip()
+    password = payload.get("password") or "password123"
 
     if not email:
         raise HTTPException(status_code=400, detail="Email is required")
 
-    # Check if exists
+    # Check DB for existing user
+    existing = await db.fetchrow("SELECT * FROM public.profiles WHERE LOWER(email) = $1", email)
+    if existing:
+        return {"message": "User already exists", "user": existing}
+
     for p in _PROFILES.values():
         if p.get("email", "").lower() == email:
             return {"message": "User already exists", "user": p}
@@ -148,16 +177,28 @@ async def register(payload: dict[str, Any]) -> dict[str, Any]:
 
     if role == "startup":
         startup_id = f"startup-{uuid.uuid4().hex[:8]}"
-        industry = payload.get("industry", "Technology")
-        gst = payload.get("gst_number", "")
-        inc_cert = payload.get("incorporation_cert", "INCORPORATION_CERTIFICATE.pdf")
-        
-        # Call startup service to create startup record
+        industry = payload.get("industry") or "Technology"
+        gst = payload.get("gst_number") or ""
+        inc_cert = payload.get("incorporation_cert") or "INCORPORATION_CERTIFICATE.pdf"
+
+        # Create startup in PostgreSQL
+        await db.execute(
+            """
+            INSERT INTO public.startups (id, owner_id, name, slug, industry, gst_number, incorporation_cert, stage, email, is_verified, verification_status)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, 'Seed', $8, FALSE, 'pending')
+            ON CONFLICT (id) DO NOTHING
+            """,
+            startup_id, user_id, name, f"{name.lower().replace(' ', '-')}-{uuid.uuid4().hex[:4]}",
+            industry, gst, inc_cert, email
+        )
+
+        # Notify startup-service if available
         try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
+            async with httpx.AsyncClient(timeout=3.0) as client:
                 await client.post(
                     f"{STARTUP_SERVICE_URL}/startups",
                     json={
+                        "id": startup_id,
                         "name": name,
                         "industry": industry,
                         "gst_number": gst,
@@ -166,8 +207,18 @@ async def register(payload: dict[str, Any]) -> dict[str, Any]:
                         "stage": "Seed",
                     }
                 )
-        except Exception:  # noqa: BLE001
+        except Exception:
             pass
+
+        # Insert profile
+        await db.execute(
+            """
+            INSERT INTO public.profiles (id, email, password_hash, full_name, role, startup_id, is_verified)
+            VALUES ($1, $2, $3, $4, 'startup', $5, FALSE)
+            ON CONFLICT (id) DO NOTHING
+            """,
+            user_id, email, password, name, startup_id
+        )
 
         profile = {
             "id": user_id,
@@ -187,19 +238,42 @@ async def register(payload: dict[str, Any]) -> dict[str, Any]:
 
     elif role == "investor":
         investor_id = f"investor-{uuid.uuid4().hex[:8]}"
-        # Call investor service to create investor record
+        firm = payload.get("firm") or "Private Angel"
+
+        # Create investor in PostgreSQL
+        await db.execute(
+            """
+            INSERT INTO public.investors (id, owner_id, display_name, email, firm, is_verified, verification_status)
+            VALUES ($1, $2, $3, $4, $5, FALSE, 'unverified')
+            ON CONFLICT (id) DO NOTHING
+            """,
+            investor_id, user_id, name, email, firm
+        )
+
+        # Notify investor-service if available
         try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
+            async with httpx.AsyncClient(timeout=3.0) as client:
                 await client.post(
                     f"{INVESTOR_SERVICE_URL}/investors",
                     json={
+                        "id": investor_id,
                         "display_name": name,
                         "email": email,
-                        "firm": "Private Angel",
+                        "firm": firm,
                     }
                 )
-        except Exception:  # noqa: BLE001
+        except Exception:
             pass
+
+        # Insert profile
+        await db.execute(
+            """
+            INSERT INTO public.profiles (id, email, password_hash, full_name, role, investor_id, is_verified)
+            VALUES ($1, $2, $3, $4, 'investor', $5, FALSE)
+            ON CONFLICT (id) DO NOTHING
+            """,
+            user_id, email, password, name, investor_id
+        )
 
         profile = {
             "id": user_id,
@@ -207,7 +281,7 @@ async def register(payload: dict[str, Any]) -> dict[str, Any]:
             "email": email,
             "role": "investor",
             "investor_id": investor_id,
-            "firm": "Private Angel",
+            "firm": firm,
             "is_verified": False,
             "created_at": datetime.utcnow().isoformat() + "Z",
         }
@@ -215,6 +289,16 @@ async def register(payload: dict[str, Any]) -> dict[str, Any]:
         return {"message": "Investor account created successfully", "user": profile}
 
     else:
+        # Admin or general role
+        await db.execute(
+            """
+            INSERT INTO public.profiles (id, email, password_hash, full_name, role, is_verified)
+            VALUES ($1, $2, $3, $4, 'admin', TRUE)
+            ON CONFLICT (id) DO NOTHING
+            """,
+            user_id, email, password, name
+        )
+
         profile = {
             "id": user_id,
             "full_name": name,
@@ -229,33 +313,69 @@ async def register(payload: dict[str, Any]) -> dict[str, Any]:
 @app.post("/login")
 async def login(payload: LoginRequest) -> dict[str, Any]:
     email = payload.email.lower().strip()
-    
-    # Match by email
+
+    # 1. Look up by exact email in DB
+    user_row = await db.fetchrow("SELECT * FROM public.profiles WHERE LOWER(email) = $1", email)
+    if user_row:
+        # Enrich startup_name or firm if missing
+        if user_row.get("role") == "startup" and user_row.get("startup_id"):
+            startup = await db.fetchrow("SELECT name, industry FROM public.startups WHERE id = $1", user_row["startup_id"])
+            if startup:
+                user_row["startup_name"] = startup.get("name")
+                user_row["industry"] = startup.get("industry")
+        elif user_row.get("role") == "investor" and user_row.get("investor_id"):
+            inv = await db.fetchrow("SELECT firm FROM public.investors WHERE id = $1", user_row["investor_id"])
+            if inv:
+                user_row["firm"] = inv.get("firm")
+        return {"message": "Login successful", "user": user_row}
+
+    # 2. Check in-memory profiles by email
     for p in _PROFILES.values():
         if p.get("email", "").lower() == email:
             return {"message": "Login successful", "user": p}
 
-    # Match by role if email is a role alias
-    if email in ["admin", "superadmin"]:
-        return {"message": "Login successful", "user": _PROFILES["admin-user"]}
-    if email in ["startup", "founder"]:
-        return {"message": "Login successful", "user": _PROFILES["founder-aerogrid"]}
-    if email in ["investor", "verified_investor"]:
-        return {"message": "Login successful", "user": _PROFILES["investor-elena"]}
-    if email in ["unverified_investor", "david"]:
-        return {"message": "Login successful", "user": _PROFILES["investor-david"]}
+    # 3. Match role aliases for easy testing
+    role_map = {
+        "admin": "admin-user",
+        "superadmin": "admin-user",
+        "startup": "founder-aerogrid",
+        "founder": "founder-aerogrid",
+        "investor": "investor-elena",
+        "verified_investor": "investor-elena",
+        "unverified_investor": "investor-david",
+        "david": "investor-david",
+    }
+    if email in role_map:
+        target_id = role_map[email]
+        db_user = await db.fetchrow("SELECT * FROM public.profiles WHERE id = $1", target_id)
+        if db_user:
+            return {"message": "Login successful", "user": db_user}
+        if target_id in _PROFILES:
+            return {"message": "Login successful", "user": _PROFILES[target_id]}
 
-    # Fallback create on login for smooth demo experience
+    # 4. Fallback create for smooth test experience and persist to PostgreSQL
     user_id = f"user-{uuid.uuid4().hex[:8]}"
-    role = payload.role or "startup"
+    role = payload.role or ("investor" if "investor" in email else "startup")
+    name = email.split("@")[0].title() if "@" in email else email.title()
+
     new_user = {
         "id": user_id,
-        "full_name": email.split("@")[0].title() if "@" in email else email.title(),
+        "full_name": name,
         "email": email,
         "role": role,
         "is_verified": False,
         "created_at": datetime.utcnow().isoformat() + "Z",
     }
+
+    await db.execute(
+        """
+        INSERT INTO public.profiles (id, email, password_hash, full_name, role, is_verified)
+        VALUES ($1, $2, $3, $4, $5, FALSE)
+        ON CONFLICT (id) DO NOTHING
+        """,
+        user_id, email, payload.password or "password123", name, role
+    )
+
     _PROFILES[user_id] = new_user
     return {"message": "Login successful", "user": new_user}
 
@@ -270,5 +390,14 @@ async def upsert_profile(payload: ProfileCreate) -> dict[str, Any]:
         "email": payload.email,
         "created_at": datetime.utcnow().isoformat() + "Z",
     }
+    if payload.email:
+        await db.execute(
+            """
+            INSERT INTO public.profiles (id, email, full_name, role)
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT (id) DO UPDATE SET full_name = EXCLUDED.full_name, role = EXCLUDED.role
+            """,
+            user_id, payload.email, payload.full_name, payload.role
+        )
     _PROFILES[user_id] = profile
     return profile
