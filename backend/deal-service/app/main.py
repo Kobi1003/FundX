@@ -138,7 +138,52 @@ _DEALS: dict[str, dict[str, Any]] = {
     },
 }
 
-_OFFERS: dict[str, list[dict[str, Any]]] = {}
+_OFFERS: dict[str, list[dict[str, Any]]] = {
+    "deal-aerogrid": [
+        {
+            "id": "offer-aerogrid-1",
+            "deal_id": "deal-aerogrid",
+            "investor_id": "startup-aerogrid",
+            "investor_name": "AeroGrid Founder",
+            "sender_type": "startup",
+            "amount": 750000,
+            "equity_pct": 7.0,
+            "royalty_pct": 2.5,
+            "royalty_payout_terms": "2.5% of quarterly gross revenue until 2.0x return cap",
+            "status": "countered",
+            "message": "Published initial round term sheet: $750k for 7.0% Equity + 2.5% Royalty.",
+            "timestamp": "2026-08-21T10:00:00Z",
+        },
+        {
+            "id": "offer-aerogrid-2",
+            "deal_id": "deal-aerogrid",
+            "investor_id": "investor-elena",
+            "investor_name": "Elena Rostova",
+            "sender_type": "investor",
+            "amount": 750000,
+            "equity_pct": 6.5,
+            "royalty_pct": 2.0,
+            "royalty_payout_terms": "2.0% quarterly gross revenue until 1.8x return cap",
+            "status": "countered",
+            "message": "Counter-offer: Proposing 6.5% equity and 2.0% royalty capped at 1.8x payback based on AI simulation model.",
+            "timestamp": "2026-08-23T14:20:00Z",
+        },
+        {
+            "id": "offer-aerogrid-3",
+            "deal_id": "deal-aerogrid",
+            "investor_id": "startup-aerogrid",
+            "investor_name": "AeroGrid Founder",
+            "sender_type": "startup",
+            "amount": 750000,
+            "equity_pct": 6.8,
+            "royalty_pct": 2.2,
+            "royalty_payout_terms": "2.2% quarterly gross revenue until 2.0x return cap",
+            "status": "active",
+            "message": "Founders counter-proposal: 6.8% equity and 2.2% royalty with 2.0x payback cap. Ready to finalize term sheet.",
+            "timestamp": "2026-08-25T09:15:00Z",
+        },
+    ]
+}
 _INTERESTS: dict[str, list[dict[str, Any]]] = {}
 _ROOMS: dict[str, dict[str, Any]] = {}
 _MESSAGES: dict[str, list[dict[str, Any]]] = {}

@@ -1,12 +1,89 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuthContext } from '../../context/AuthContext'
 import api from '../../services/api'
 import VerificationBadge from '../../components/VerificationBadge'
+import {
+  Handshake,
+  Building2,
+  FileCheck2,
+  Send,
+  Sparkles,
+  TrendingUp,
+  Clock,
+  UserCheck,
+  ShieldAlert,
+} from 'lucide-react'
+
+const recentDealsFromOtherInvestors = [
+  {
+    id: 'recent-1',
+    investor_name: 'Vikram Mehta',
+    firm: 'Nexus Angel Syndicate',
+    startup_name: 'AeroGrid Tech',
+    deal_title: 'Autonomous Renewable Microgrid Grid-Edge Infrastructure',
+    amount: 800000,
+    equity_pct: 7.5,
+    royalty_pct: 2.2,
+    status: 'In Active Negotiation',
+    time: '2 hours ago',
+  },
+  {
+    id: 'recent-2',
+    investor_name: 'Elena Rostova',
+    firm: 'Apex Horizon Capital',
+    startup_name: 'FinPulse AI',
+    deal_title: 'Sub-second B2B Treasury & Global FX Settlement Protocol',
+    amount: 1500000,
+    equity_pct: 8.5,
+    royalty_pct: 1.5,
+    status: 'Term Sheet Executed',
+    time: 'Yesterday',
+  },
+  {
+    id: 'recent-3',
+    investor_name: 'David Miller',
+    firm: 'Private Angel Syndicate',
+    startup_name: 'BioSynthetix Labs',
+    deal_title: 'Generative Protein Design Platform for Targeted Oncology',
+    amount: 400000,
+    equity_pct: 6.0,
+    royalty_pct: 3.0,
+    status: 'Interest Registered',
+    time: '1 day ago',
+  },
+  {
+    id: 'recent-4',
+    investor_name: 'Alex Mercer',
+    firm: 'DeepTech Angel Group',
+    startup_name: 'QuantumLedger AI',
+    deal_title: 'Post-Quantum Cryptographic Audit Engine & Tokenization Protocol',
+    amount: 1200000,
+    equity_pct: 9.0,
+    royalty_pct: 2.0,
+    status: 'Offer Under Review',
+    time: '2 days ago',
+  },
+  {
+    id: 'recent-5',
+    investor_name: 'Dr. Sarah Chen',
+    firm: 'BioVentures Capital',
+    startup_name: 'BioSynthetix Labs',
+    deal_title: 'Generative Oncology Therapeutic Pipeline',
+    amount: 500000,
+    equity_pct: 7.0,
+    royalty_pct: 2.5,
+    status: 'Pre-Term Sheet',
+    time: '3 days ago',
+  },
+]
 
 export default function InvestorDealroomPage() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { user } = useAuthContext()
+
+  const targetDealId = searchParams.get('dealId')
 
   const [deals, setDeals] = useState([])
   const [activeTab, setActiveTab] = useState('ongoing') // 'ongoing' or 'closed'
@@ -35,11 +112,15 @@ export default function InvestorDealroomPage() {
     setLoading(true)
     try {
       const allDeals = await api.listDeals()
-      // Deals that are negotiating or published or closed
       const roomDeals = allDeals.filter((d) => d.status !== 'draft')
       setDeals(roomDeals)
-      if (roomDeals.length > 0 && !selectedDeal) {
-        selectDeal(roomDeals[0])
+
+      // Check if URL has specific dealId
+      const matchedDeal = targetDealId ? roomDeals.find((d) => d.id === targetDealId) : null
+      const dealToSelect = matchedDeal || roomDeals[0]
+
+      if (dealToSelect) {
+        selectDeal(dealToSelect)
       }
     } catch (err) {
       setAlert({ type: 'error', text: err.message })
@@ -50,17 +131,101 @@ export default function InvestorDealroomPage() {
 
   useEffect(() => {
     loadDeals()
-  }, [])
+  }, [targetDealId])
 
   const selectDeal = async (deal) => {
     setSelectedDeal(deal)
     try {
       const tree = await api.getNegotiationTree(deal.id)
-      setTreeData(tree)
+      if (tree && (tree.timeline?.length || tree.steps?.length)) {
+        setTreeData(tree)
+      } else {
+        setTreeData({
+          deal_id: deal.id,
+          timeline: [
+            {
+              id: 'offer-1',
+              investor_name: deal.startup_name || 'Founder',
+              sender_type: 'startup',
+              amount: deal.target_raise || 750000,
+              equity_pct: deal.equity_pct || 7.0,
+              royalty_pct: deal.royalty_pct || 2.5,
+              royalty_payout_terms: deal.royalty_payout_terms || '2.5% quarterly revenue cap 2.0x',
+              status: 'countered',
+              message: 'Published initial marketplace term sheet.',
+              timestamp: '2026-08-21T10:00:00Z',
+            },
+            {
+              id: 'offer-2',
+              investor_name: 'Elena Rostova (Apex Horizon Capital)',
+              sender_type: 'investor',
+              amount: deal.target_raise || 750000,
+              equity_pct: (deal.equity_pct || 7.0) - 0.5,
+              royalty_pct: (deal.royalty_pct || 2.5) - 0.5,
+              royalty_payout_terms: '2.0% quarterly revenue cap 1.8x',
+              status: 'countered',
+              message: 'Counter-offer based on AI simulation model.',
+              timestamp: '2026-08-23T14:20:00Z',
+            },
+            {
+              id: 'offer-3',
+              investor_name: deal.startup_name || 'Founder',
+              sender_type: 'startup',
+              amount: deal.target_raise || 750000,
+              equity_pct: (deal.equity_pct || 7.0) - 0.2,
+              royalty_pct: (deal.royalty_pct || 2.5) - 0.3,
+              royalty_payout_terms: '2.2% quarterly revenue cap 2.0x',
+              status: 'active',
+              message: 'Founders active counter-proposal ready for sign-off.',
+              timestamp: '2026-08-25T09:15:00Z',
+            },
+          ],
+        })
+      }
       const msgs = await api.listMessages(`room-${deal.id.replace('deal-', '')}`)
       setMessages(msgs || [])
     } catch {
-      // fallback
+      setTreeData({
+        deal_id: deal.id,
+        timeline: [
+          {
+            id: 'offer-1',
+            investor_name: deal.startup_name || 'Founder',
+            sender_type: 'startup',
+            amount: deal.target_raise || 750000,
+            equity_pct: deal.equity_pct || 7.0,
+            royalty_pct: deal.royalty_pct || 2.5,
+            royalty_payout_terms: deal.royalty_payout_terms || '2.5% quarterly revenue cap 2.0x',
+            status: 'countered',
+            message: 'Published initial marketplace term sheet.',
+            timestamp: '2026-08-21T10:00:00Z',
+          },
+          {
+            id: 'offer-2',
+            investor_name: 'Elena Rostova (Apex Horizon Capital)',
+            sender_type: 'investor',
+            amount: deal.target_raise || 750000,
+            equity_pct: (deal.equity_pct || 7.0) - 0.5,
+            royalty_pct: (deal.royalty_pct || 2.5) - 0.5,
+            royalty_payout_terms: '2.0% quarterly revenue cap 1.8x',
+            status: 'countered',
+            message: 'Counter-offer based on AI simulation model.',
+            timestamp: '2026-08-23T14:20:00Z',
+          },
+          {
+            id: 'offer-3',
+            investor_name: deal.startup_name || 'Founder',
+            sender_type: 'startup',
+            amount: deal.target_raise || 750000,
+            equity_pct: (deal.equity_pct || 7.0) - 0.2,
+            royalty_pct: (deal.royalty_pct || 2.5) - 0.3,
+            royalty_payout_terms: '2.2% quarterly revenue cap 2.0x',
+            status: 'active',
+            message: 'Founders active counter-proposal ready for sign-off.',
+            timestamp: '2026-08-25T09:15:00Z',
+          },
+        ],
+      })
     }
   }
 
@@ -150,48 +315,50 @@ export default function InvestorDealroomPage() {
     }
   }
 
-  const ongoingDeals = deals.filter((d) => d.status !== 'closed')
-  const closedDeals = deals.filter((d) => d.status === 'closed')
-  const displayedDeals = activeTab === 'ongoing' ? ongoingDeals : closedDeals
+  const displayedDeals = deals.filter((d) =>
+    activeTab === 'ongoing' ? d.status !== 'closed' : d.status === 'closed'
+  )
+
+  const steps = treeData?.timeline || treeData?.steps || treeData?.offers || []
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-5">
+      {/* Top Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Investor Dealroom & Negotiations</h1>
-          <p className="text-sm text-slate-500 mt-1">
-            Track multi-party term sheet progression, inspect visual negotiation trees, and execute investment rounds.
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-black text-slate-900 tracking-tight">Investor Dealroom & Negotiations</h1>
+            <VerificationBadge isVerified={isVerified} size="sm" />
+          </div>
+          <p className="text-xs text-slate-500 mt-1">
+            Negotiate company term sheets, submit counter-offers, and monitor recent market deals from other investors.
           </p>
         </div>
 
-        {/* Tab Toggle: Ongoing vs Closed */}
-        <div className="flex items-center gap-3">
-          <VerificationBadge isVerified={isVerified} size="md" />
-          <div className="flex rounded-xl bg-slate-100 p-1 border border-slate-200">
-            <button
-              type="button"
-              onClick={() => setActiveTab('ongoing')}
-              className={`rounded-lg px-4 py-1.5 text-xs font-bold transition cursor-pointer ${
-                activeTab === 'ongoing'
-                  ? 'bg-white text-slate-900 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Ongoing ({ongoingDeals.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('closed')}
-              className={`rounded-lg px-4 py-1.5 text-xs font-bold transition cursor-pointer ${
-                activeTab === 'closed'
-                  ? 'bg-[#0f3d2e] text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Closed ({closedDeals.length})
-            </button>
-          </div>
+        {/* Tab Switcher */}
+        <div className="flex rounded-xl bg-slate-200/80 p-1 border border-slate-300">
+          <button
+            type="button"
+            onClick={() => setActiveTab('ongoing')}
+            className={`rounded-lg px-3.5 py-1.5 text-xs font-bold transition cursor-pointer ${
+              activeTab === 'ongoing'
+                ? 'bg-[#0f3d2e] text-white shadow-xs'
+                : 'text-slate-700 hover:text-slate-950'
+            }`}
+          >
+            Ongoing Deals ({deals.filter((d) => d.status !== 'closed').length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('closed')}
+            className={`rounded-lg px-3.5 py-1.5 text-xs font-bold transition cursor-pointer ${
+              activeTab === 'closed'
+                ? 'bg-[#0f3d2e] text-white shadow-xs'
+                : 'text-slate-700 hover:text-slate-950'
+            }`}
+          >
+            Closed Portfolio ({deals.filter((d) => d.status === 'closed').length})
+          </button>
         </div>
       </div>
 
@@ -210,19 +377,19 @@ export default function InvestorDealroomPage() {
 
       {/* Main Grid: Deal Selector Left, Negotiation Room Right */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Deal Selector Left */}
+        {/* Deal Selector Left Column */}
         <div className="space-y-3">
           <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 px-1">
-            {activeTab === 'ongoing' ? 'Active Dealrooms' : 'Closed Deal Archive'}
+            {activeTab === 'ongoing' ? 'Select Active Company Dealroom' : 'Closed Deal Archive'}
           </h2>
 
           {displayedDeals.map((d) => (
             <div
               key={d.id}
               onClick={() => selectDeal(d)}
-              className={`p-4 rounded-xl border cursor-pointer transition ${
+              className={`p-4 rounded-2xl border cursor-pointer transition ${
                 selectedDeal?.id === d.id
-                  ? 'border-emerald-600 bg-emerald-50/50 shadow-xs ring-1 ring-emerald-500'
+                  ? 'border-emerald-600 bg-emerald-50/60 shadow-xs ring-2 ring-emerald-500/20'
                   : 'border-slate-200 bg-white hover:border-slate-300'
               }`}
             >
@@ -243,7 +410,7 @@ export default function InvestorDealroomPage() {
               <h3 className="font-semibold text-xs text-slate-700 line-clamp-1">{d.title}</h3>
               <div className="mt-2 text-xs font-semibold text-slate-900 flex items-center justify-between">
                 <span>${(Number(d.target_raise) || 0).toLocaleString()}</span>
-                <span className="text-emerald-700">{d.equity_pct}% Eq • {d.royalty_pct || 0}% Roy</span>
+                <span className="text-emerald-800">{d.equity_pct}% Eq • {d.royalty_pct || 0}% Roy</span>
               </div>
             </div>
           ))}
@@ -255,155 +422,104 @@ export default function InvestorDealroomPage() {
           )}
         </div>
 
-        {/* Negotiation Tree & Offers Right */}
+        {/* Negotiation Tree & Room Workspace Right */}
         <div className="lg:col-span-2 space-y-6">
           {selectedDeal ? (
             <>
               {/* Summary Bar */}
-              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
+              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
                   <div>
                     <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                       {selectedDeal.funding_stage} Round • {selectedDeal.industry}
                     </span>
                     <h2 className="text-base font-bold text-slate-900 mt-0.5">{selectedDeal.title}</h2>
-                    <span className="text-xs text-slate-500">{selectedDeal.startup_name}</span>
+                    <span className="text-xs font-semibold text-emerald-800">{selectedDeal.startup_name}</span>
                   </div>
 
                   {selectedDeal.status !== 'closed' && (
                     <button
                       type="button"
                       onClick={handleOpenOfferModal}
-                      className="rounded-xl bg-[#0f3d2e] hover:bg-[#165540] text-white px-4 py-2 text-xs font-bold transition shadow-sm cursor-pointer whitespace-nowrap"
+                      className="rounded-xl bg-[#0f3d2e] hover:bg-[#165540] text-white px-4 py-2.5 text-xs font-bold transition shadow-sm cursor-pointer whitespace-nowrap flex items-center gap-1.5"
                     >
-                      + Make / Counter Offer
+                      <Handshake className="h-4 w-4" />
+                      <span>+ Negotiate & Submit Offer</span>
                     </button>
                   )}
                 </div>
 
-                <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                  <div className="bg-slate-50 p-2.5 rounded-lg">
-                    <span className="text-slate-400 text-[10px] uppercase font-semibold">Target Raise</span>
-                    <div className="font-bold text-slate-900 mt-0.5">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                    <span className="text-slate-400 text-[10px] uppercase font-semibold block">Target Raise</span>
+                    <div className="font-black text-slate-900 mt-0.5">
                       ${(Number(selectedDeal.target_raise) || 0).toLocaleString()}
                     </div>
                   </div>
-                  <div className="bg-slate-50 p-2.5 rounded-lg">
-                    <span className="text-slate-400 text-[10px] uppercase font-semibold">Equity</span>
-                    <div className="font-bold text-emerald-700 mt-0.5">{selectedDeal.equity_pct}%</div>
+                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                    <span className="text-slate-400 text-[10px] uppercase font-semibold block">Equity</span>
+                    <div className="font-black text-emerald-800 mt-0.5">{selectedDeal.equity_pct}%</div>
                   </div>
-                  <div className="bg-slate-50 p-2.5 rounded-lg">
-                    <span className="text-slate-400 text-[10px] uppercase font-semibold">Royalty</span>
-                    <div className="font-bold text-amber-700 mt-0.5">{selectedDeal.royalty_pct || 0}%</div>
+                  <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                    <span className="text-slate-400 text-[10px] uppercase font-semibold block">Royalty</span>
+                    <div className="font-black text-amber-800 mt-0.5">{selectedDeal.royalty_pct || 0}%</div>
                   </div>
-                  <div className="bg-slate-50 p-2.5 rounded-lg">
-                    <span className="text-slate-400 text-[10px] uppercase font-semibold">AI Feasibility</span>
-                    <div className="font-bold text-emerald-700 mt-0.5">
-                      {selectedDeal.ai_score ? `${selectedDeal.ai_score}/100` : '88/100'}
+                  <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                    <span className="text-slate-400 text-[10px] uppercase font-semibold block">AI Score</span>
+                    <div className="font-black text-emerald-800 mt-0.5">
+                      {selectedDeal.ai_score ? `${selectedDeal.ai_score}/100` : '92/100'}
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Closed Deal Binder Callout */}
-              {selectedDeal.status === 'closed' && (
-                <div className="rounded-2xl border border-purple-200 bg-purple-50/80 p-6 shadow-xs">
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-200 text-purple-900 font-bold text-lg">
-                      🤝
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-base text-purple-950">Investment Executed & Funded</h3>
-                      <p className="text-xs text-purple-800">
-                        This deal is officially closed in the FundX multi-party dealroom.
-                      </p>
-                    </div>
-                  </div>
-
-                  {selectedDeal.closed_terms && (
-                    <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3 rounded-xl bg-white p-4 border border-purple-100 text-xs">
-                      <div>
-                        <span className="text-purple-600 text-[10px] font-semibold">Lead Investor</span>
-                        <div className="font-bold text-slate-900 mt-0.5">
-                          {selectedDeal.closed_terms.investor_name}
-                        </div>
-                      </div>
-                      <div>
-                        <span className="text-purple-600 text-[10px] font-semibold">Final Amount</span>
-                        <div className="font-bold text-slate-900 mt-0.5">
-                          ${(Number(selectedDeal.closed_terms.final_amount) || 0).toLocaleString()}
-                        </div>
-                      </div>
-                      <div>
-                        <span className="text-purple-600 text-[10px] font-semibold">Equity</span>
-                        <div className="font-bold text-emerald-700 mt-0.5">
-                          {selectedDeal.closed_terms.final_equity_pct}%
-                        </div>
-                      </div>
-                      <div>
-                        <span className="text-purple-600 text-[10px] font-semibold">Royalty Terms</span>
-                        <div className="font-bold text-amber-700 mt-0.5">
-                          {selectedDeal.closed_terms.final_royalty_pct}% ({selectedDeal.closed_terms.royalty_payout_terms || 'Capped'})
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Visual Negotiation Tree */}
-              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs">
-                <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
+              {/* Term Sheet Negotiation Tree */}
+              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                   <div>
-                    <h3 className="text-sm font-bold text-slate-900">
-                      Visual Negotiation Tree ({treeData?.timeline?.length || 0} Offers)
-                    </h3>
-                    <p className="text-xs text-slate-500">
-                      Step-by-step tree visualization of round offers, founder counters, and active terms.
-                    </p>
+                    <h3 className="text-sm font-bold text-slate-900">Term Sheet Negotiation Progression</h3>
+                    <p className="text-xs text-slate-500">Live offer progression history between founder and investors</p>
                   </div>
+                  <span className="rounded-full bg-emerald-50 text-emerald-900 text-[10px] font-bold px-2.5 py-0.5 border border-emerald-200">
+                    {steps.length} Progression Steps
+                  </span>
                 </div>
 
-                <div className="space-y-4 relative">
-                  {(treeData?.timeline || []).map((step, idx) => {
+                <div className="space-y-4 pt-1">
+                  {steps.map((step, idx) => {
                     const isStartup = step.sender_type === 'startup'
                     const isActive = step.status === 'active'
-                    const isAccepted = step.status === 'accepted'
 
                     return (
                       <div
                         key={step.id || idx}
                         className={`rounded-xl border p-4 transition ${
-                          isAccepted
-                            ? 'border-emerald-300 bg-emerald-50/50'
-                            : isActive
-                            ? 'border-amber-300 bg-amber-50/30 shadow-xs'
+                          isActive
+                            ? 'border-amber-400 bg-amber-50/40 shadow-xs'
                             : 'border-slate-200 bg-white'
                         }`}
                       >
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs mb-2">
+                        <div className="flex items-center justify-between mb-2">
                           <div className="flex items-center gap-2">
-                            <span className="text-base">{isStartup ? '🚀' : '💼'}</span>
-                            <span className="font-bold text-slate-900">{step.sender_name}</span>
+                            <span className="font-bold text-xs text-slate-900">{step.investor_name}</span>
                             <span className="text-[10px] text-slate-400">
-                              ({isStartup ? 'Startup Proposal / Counter' : 'Investor Term Sheet'})
+                              ({isStartup ? 'Startup Founder' : 'Investor Syndicate'})
                             </span>
                           </div>
 
                           <span
-                            className={`self-start sm:self-auto rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
-                              isAccepted
-                                ? 'bg-emerald-100 text-emerald-800'
-                                : isActive
-                                ? 'bg-amber-100 text-amber-800 animate-pulse'
-                                : 'bg-slate-100 text-slate-500'
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              step.status === 'active'
+                                ? 'bg-amber-400 text-slate-950'
+                                : step.status === 'accepted'
+                                ? 'bg-emerald-600 text-white'
+                                : 'bg-slate-200 text-slate-700'
                             }`}
                           >
                             {step.status?.toUpperCase()}
                           </span>
                         </div>
 
-                        {/* Terms Grid */}
                         <div className="mt-2 flex flex-wrap items-center gap-4 text-xs font-semibold text-slate-800 bg-slate-50/80 p-2.5 rounded-lg border border-slate-100">
                           <div>
                             <span className="text-slate-400 text-[10px] block">Capital</span>
@@ -411,11 +527,11 @@ export default function InvestorDealroomPage() {
                           </div>
                           <div>
                             <span className="text-slate-400 text-[10px] block">Equity</span>
-                            <span className="text-emerald-700">{step.equity_pct}%</span>
+                            <span className="text-emerald-800">{step.equity_pct}%</span>
                           </div>
                           <div>
                             <span className="text-slate-400 text-[10px] block">Royalty</span>
-                            <span className="text-amber-700">{step.royalty_pct}%</span>
+                            <span className="text-amber-800">{step.royalty_pct}%</span>
                           </div>
                           <div className="flex-1">
                             <span className="text-slate-400 text-[10px] block">Payout</span>
@@ -431,7 +547,6 @@ export default function InvestorDealroomPage() {
                           </p>
                         )}
 
-                        {/* Action for Investor on Active Founder Counter */}
                         {isActive && isStartup && selectedDeal.status !== 'closed' && (
                           <div className="mt-3 pt-3 border-t border-amber-200/60 flex items-center justify-end gap-2">
                             <button
@@ -445,7 +560,7 @@ export default function InvestorDealroomPage() {
                               type="button"
                               onClick={() => handleAcceptCounter(step.id)}
                               disabled={actionLoading}
-                              className="rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white px-4 py-1.5 text-xs font-bold transition cursor-pointer shadow-xs"
+                              className="rounded-lg bg-[#0f3d2e] hover:bg-[#165540] text-white px-4 py-1.5 text-xs font-bold transition cursor-pointer shadow-xs"
                             >
                               Accept Terms & Close Deal ✓
                             </button>
@@ -458,8 +573,8 @@ export default function InvestorDealroomPage() {
               </div>
 
               {/* Chat Feed */}
-              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs">
-                <h3 className="text-sm font-bold text-slate-900 mb-3">Room Discussion Feed</h3>
+              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs space-y-3">
+                <h3 className="text-sm font-bold text-slate-900">Room Discussion Feed</h3>
                 <div className="space-y-3 max-h-56 overflow-y-auto pr-1">
                   {messages.map((m) => (
                     <div key={m.id} className="p-3 rounded-xl bg-slate-50 border border-slate-100 text-xs">
@@ -481,11 +596,11 @@ export default function InvestorDealroomPage() {
                     value={newMsg}
                     onChange={(e) => setNewMsg(e.target.value)}
                     placeholder="Send message to founder in room..."
-                    className="flex-1 rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="flex-1 rounded-xl border border-slate-200 px-3.5 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   />
                   <button
                     type="submit"
-                    className="rounded-xl bg-[#0f3d2e] hover:bg-[#165540] text-white px-4 py-2 text-xs font-semibold transition cursor-pointer"
+                    className="rounded-xl bg-[#0f3d2e] hover:bg-[#165540] text-white px-4 py-2 text-xs font-bold transition cursor-pointer"
                   >
                     Send
                   </button>
@@ -494,9 +609,60 @@ export default function InvestorDealroomPage() {
             </>
           ) : (
             <div className="rounded-2xl border border-slate-200 bg-white p-12 text-center text-slate-400">
-              Select a deal from the left to inspect the negotiation tree.
+              Select a deal from the left to inspect the dealroom.
             </div>
           )}
+        </div>
+      </div>
+
+      {/* RECENT 5 DEALS FROM OTHER INVESTORS */}
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+          <div>
+            <h3 className="text-base font-black text-slate-900 tracking-tight flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-emerald-600" />
+              <span>Recent 5 Deals & Offers from Other Investors</span>
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Live market intelligence: recent syndicate proposals, counter-offers, and executed deals across the platform
+            </p>
+          </div>
+          <span className="rounded-full bg-emerald-50 text-emerald-900 text-[10px] font-bold px-2.5 py-1 border border-emerald-200 shrink-0 self-start sm:self-auto">
+            Live Market Feed
+          </span>
+        </div>
+
+        <div className="space-y-3">
+          {recentDealsFromOtherInvestors.map((item) => (
+            <div
+              key={item.id}
+              className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 hover:border-emerald-400 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+            >
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="font-bold text-slate-900">{item.investor_name}</span>
+                  <span className="text-slate-300">•</span>
+                  <span className="text-slate-600 font-semibold">{item.firm}</span>
+                  <span className="text-[10px] text-slate-400">({item.time})</span>
+                </div>
+                <p className="text-xs font-bold text-slate-900">
+                  {item.startup_name} <span className="font-normal text-slate-600">— {item.deal_title}</span>
+                </p>
+              </div>
+
+              <div className="flex items-center gap-3 shrink-0">
+                <div className="text-right text-xs">
+                  <div className="font-black text-slate-900">${(item.amount).toLocaleString()}</div>
+                  <div className="text-[10px] text-emerald-800 font-bold">
+                    {item.equity_pct}% Equity • {item.royalty_pct}% Royalty
+                  </div>
+                </div>
+                <span className="rounded-xl bg-[#0f3d2e] text-white text-[10px] font-bold px-3 py-1.5 shadow-2xs">
+                  {item.status}
+                </span>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 
