@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import os
 import sys
+import uuid
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import BackgroundTasks, FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 sys.path.insert(0, "/app")
@@ -30,6 +31,19 @@ SERVICE_NAME = os.getenv("SERVICE_NAME", "ai-service")
 
 app = FastAPI(title="AI Service", version="0.1.0")
 
+_ANALYSIS_JOBS: dict[str, dict[str, Any]] = {}
+
+
+async def _execute_analysis_job(job_id: str, payload: StartupAnalysisRequest) -> None:
+    _ANALYSIS_JOBS[job_id]["status"] = "RUNNING"
+    try:
+        result = await run_startup_analysis(payload)
+        _ANALYSIS_JOBS[job_id]["status"] = "COMPLETED"
+        _ANALYSIS_JOBS[job_id]["result"] = result
+    except Exception as exc:  # noqa: BLE001
+        _ANALYSIS_JOBS[job_id]["status"] = "FAILED"
+        _ANALYSIS_JOBS[job_id]["error"] = str(exc)
+
 
 @app.get("/health")
 async def health() -> dict[str, Any]:
@@ -47,6 +61,27 @@ async def health() -> dict[str, Any]:
 @app.post("/ai/startup-analysis")
 async def startup_analysis(payload: StartupAnalysisRequest) -> dict[str, Any]:
     return await run_startup_analysis(payload)
+
+
+@app.post("/ai/jobs/startup-analysis")
+async def create_analysis_job(payload: StartupAnalysisRequest, bg_tasks: BackgroundTasks) -> dict[str, Any]:
+    """Background async AI analysis job as defined in Section 25."""
+    job_id = str(uuid.uuid4())
+    _ANALYSIS_JOBS[job_id] = {
+        "job_id": job_id,
+        "status": "QUEUED",
+        "result": None,
+        "error": None,
+    }
+    bg_tasks.add_task(_execute_analysis_job, job_id, payload)
+    return {"job_id": job_id, "status": "QUEUED"}
+
+
+@app.get("/ai/jobs/{job_id}")
+async def get_analysis_job(job_id: str) -> dict[str, Any]:
+    if job_id not in _ANALYSIS_JOBS:
+        raise HTTPException(status_code=404, detail="Analysis job not found")
+    return _ANALYSIS_JOBS[job_id]
 
 
 @app.post("/ai/investor-analysis")
