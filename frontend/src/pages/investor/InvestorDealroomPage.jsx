@@ -764,8 +764,8 @@ export default function InvestorDealroomPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl border border-amber-300">
             <div className="flex items-center gap-3 mb-4">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-900 font-black text-2xl">
-                🛡️
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-900 font-black">
+                <ShieldAlert className="h-6 w-6 text-amber-900" />
               </div>
               <div>
                 <h3 className="font-bold text-base text-slate-900">Verification Mandatory</h3>

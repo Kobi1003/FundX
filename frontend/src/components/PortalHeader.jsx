@@ -2,7 +2,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuthContext } from '../context/AuthContext'
 import VerificationBadge from './VerificationBadge'
 import Logo from './Logo'
-import { LogIn, LogOut, ShieldCheck, Sparkles, User } from 'lucide-react'
+import { LogIn, LogOut, ShieldCheck, Sparkles, User, Rocket, Briefcase } from 'lucide-react'
 
 export default function PortalHeader() {
   const navigate = useNavigate()
@@ -19,21 +19,36 @@ export default function PortalHeader() {
     if (role === 'admin') {
       return {
         title: 'Super Admin Command',
-        badge: '👑 Super Admin Portal',
+        badge: (
+          <>
+            <ShieldCheck className="h-3.5 w-3.5 text-amber-300" />
+            <span>Super Admin Portal</span>
+          </>
+        ),
         badgeColor: 'bg-amber-400/20 text-amber-300 border-amber-400/30',
       }
     }
     if (role === 'startup') {
       return {
         title: 'Startup Founder Hub',
-        badge: '🚀 Founder Portal',
+        badge: (
+          <>
+            <Rocket className="h-3.5 w-3.5 text-emerald-300" />
+            <span>Founder Portal</span>
+          </>
+        ),
         badgeColor: 'bg-emerald-400/20 text-emerald-300 border-emerald-400/30',
       }
     }
     if (role === 'investor') {
       return {
         title: 'Syndicate Dealroom',
-        badge: '💼 Investor Portal',
+        badge: (
+          <>
+            <Briefcase className="h-3.5 w-3.5 text-cyan-300" />
+            <span>Investor Portal</span>
+          </>
+        ),
         badgeColor: 'bg-cyan-400/20 text-cyan-300 border-cyan-400/30',
       }
     }

@@ -15,6 +15,10 @@ import {
   CheckCircle2,
   Clock,
   Sparkles,
+  Briefcase,
+  Zap,
+  ShieldAlert,
+  Circle,
 } from 'lucide-react'
 
 export default function InvestorDashboardPage() {
@@ -46,8 +50,9 @@ export default function InvestorDashboardPage() {
       <div className="rounded-3xl bg-gradient-to-r from-slate-900 via-[#0a231b] to-slate-900 p-6 sm:p-8 text-white shadow-xl relative overflow-hidden border border-emerald-900/40">
         <div className="relative z-10 max-w-3xl space-y-4">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded-full bg-cyan-400/20 px-3 py-1 text-xs font-bold text-cyan-200 border border-cyan-400/30">
-              💼 Investor Syndicate Portal
+            <span className="rounded-full bg-cyan-400/20 px-3 py-1 text-xs font-bold text-cyan-200 border border-cyan-400/30 flex items-center gap-1.5">
+              <Briefcase className="h-3.5 w-3.5 text-cyan-300" />
+              <span>Investor Syndicate Portal</span>
             </span>
             <VerificationBadge isVerified={isVerified} size="md" />
           </div>
@@ -75,9 +80,16 @@ export default function InvestorDashboardPage() {
             </Link>
             <Link
               to="/investor/profile"
-              className="rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 px-4 py-2.5 text-xs font-semibold transition border border-slate-700"
+              className="rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 px-4 py-2.5 text-xs font-semibold transition border border-slate-700 flex items-center gap-1.5"
             >
-              {isVerified ? 'Edit Profile & CV' : '⚡ Upload CV & Verify'}
+              {isVerified ? (
+                'Edit Profile & CV'
+              ) : (
+                <>
+                  <Zap className="h-3.5 w-3.5 text-amber-400" />
+                  <span>Upload CV & Verify</span>
+                </>
+              )}
             </Link>
           </div>
         </div>
@@ -89,8 +101,8 @@ export default function InvestorDashboardPage() {
       {!isVerified && (
         <div className="rounded-2xl border border-amber-300 bg-amber-50/90 p-5 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-3.5">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-200 text-amber-950 font-black text-xl">
-              ⚠️
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-200 text-amber-950 font-black">
+              <ShieldAlert className="h-6 w-6 text-amber-900" />
             </div>
             <div>
               <h3 className="font-bold text-sm text-amber-950">Accredited CV Verification Required</h3>
@@ -198,13 +210,23 @@ export default function InvestorDashboardPage() {
                         {deal.funding_stage || 'Seed'} • {deal.industry}
                       </span>
                       <span
-                        className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold border ${
+                        className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold border flex items-center gap-1 ${
                           isNegotiating
                             ? 'bg-amber-50 text-amber-900 border-amber-300'
                             : 'bg-emerald-50 text-emerald-900 border-emerald-300'
                         }`}
                       >
-                        {isNegotiating ? '⚡ In Negotiation' : '🟢 Open Round'}
+                        {isNegotiating ? (
+                          <>
+                            <Zap className="h-3 w-3 text-amber-600" />
+                            <span>In Negotiation</span>
+                          </>
+                        ) : (
+                          <>
+                            <Circle className="h-2 w-2 fill-emerald-600 text-emerald-600" />
+                            <span>Open Round</span>
+                          </>
+                        )}
                       </span>
                     </div>
 

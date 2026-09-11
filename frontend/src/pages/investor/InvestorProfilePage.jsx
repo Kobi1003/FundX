@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useAuthContext } from '../../context/AuthContext'
 import api from '../../services/api'
 import VerificationBadge from '../../components/VerificationBadge'
+import { ShieldCheck } from 'lucide-react'
 
 export default function InvestorProfilePage() {
   const { user, updateActiveUser } = useAuthContext()
@@ -433,7 +434,7 @@ export default function InvestorProfilePage() {
               </div>
             ) : (
               <div className="p-8 text-center text-slate-400 text-xs space-y-2">
-                <div className="text-3xl">🛡️</div>
+                <ShieldCheck className="h-10 w-10 mx-auto text-slate-400" />
                 <p className="font-semibold text-slate-700">Verification Pending</p>
                 <p className="text-slate-500">
                   Upload your CV to run AI verification and gain Dealroom access to issue term sheets.

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useAuthContext } from '../../context/AuthContext'
 import api from '../../services/api'
 import VerificationBadge from '../../components/VerificationBadge'
+import { CheckCircle2 } from 'lucide-react'
 
 export default function StartupDashboardPage() {
   const { user } = useAuthContext()
@@ -212,16 +213,28 @@ export default function StartupDashboardPage() {
                 )}
               </div>
 
-              <div className="mt-4 pt-2 border-t border-slate-200/60 flex items-center justify-between">
+              <div className="mt-4 pt-2 border-t border-slate-200/60 flex flex-wrap items-center justify-between gap-2">
                 <span className="text-[11px] text-slate-400">
                   {deal.status === 'draft' ? 'Not yet listed' : 'Live Dealroom'}
                 </span>
-                <Link
-                  to="/startup/dealroom"
-                  className="rounded-lg bg-[#0f3d2e] hover:bg-[#165540] text-white px-3 py-1.5 text-xs font-semibold transition cursor-pointer"
-                >
-                  Manage in Dealroom →
-                </Link>
+
+                <div className="flex items-center gap-2">
+                  {(deal.status === 'negotiating' || deal.status === 'active') && (
+                    <Link
+                      to="/startup/dealroom"
+                      className="rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 text-xs font-bold transition shadow-xs flex items-center gap-1 cursor-pointer"
+                    >
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      <span>Accept Current Offer ✓</span>
+                    </Link>
+                  )}
+                  <Link
+                    to="/startup/dealroom"
+                    className="rounded-lg bg-[#0f3d2e] hover:bg-[#165540] text-white px-3 py-1.5 text-xs font-semibold transition cursor-pointer"
+                  >
+                    Manage in Dealroom →
+                  </Link>
+                </div>
               </div>
             </div>
           ))}
