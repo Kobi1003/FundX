@@ -213,6 +213,64 @@ async def health() -> dict[str, Any]:
     }
 
 
+@app.post("/investors/ensure")
+async def ensure_investor(payload: dict[str, Any]) -> dict[str, Any]:
+    """
+    Ensure an investors row exists for the logged-in user.
+    Body: { owner_id?, email?, display_name?, firm?, investor_id? }
+    """
+    email = (payload.get("email") or "").lower().strip()
+    owner_id = payload.get("owner_id") or payload.get("user_id")
+    preferred_id = payload.get("investor_id")
+    display_name = payload.get("display_name") or payload.get("full_name") or (email.split("@")[0] if email else "Investor")
+    firm = payload.get("firm") or "Private Angel"
+
+    inv = None
+    if preferred_id:
+        inv = await db.fetchrow("SELECT * FROM public.investors WHERE id = $1", preferred_id)
+    if not inv and owner_id:
+        inv = await db.fetchrow("SELECT * FROM public.investors WHERE owner_id = $1 LIMIT 1", owner_id)
+    if not inv and email:
+        inv = await db.fetchrow("SELECT * FROM public.investors WHERE LOWER(email) = $1 LIMIT 1", email)
+
+    if inv:
+        return inv
+
+    investor_id = preferred_id or f"investor-{uuid.uuid4().hex[:8]}"
+    await db.execute(
+        """
+        INSERT INTO public.investors (id, owner_id, display_name, email, firm, is_verified, verification_status, verification_score)
+        VALUES ($1, $2, $3, $4, $5, FALSE, 'unverified', 40)
+        ON CONFLICT (id) DO NOTHING
+        """,
+        investor_id, owner_id, display_name, email or None, firm,
+    )
+    if owner_id:
+        await db.execute("UPDATE public.profiles SET investor_id = $2 WHERE id = $1", owner_id, investor_id)
+
+    row = await db.fetchrow("SELECT * FROM public.investors WHERE id = $1", investor_id)
+    if row:
+        _INVESTORS[investor_id] = row
+        return row
+
+    # In-memory fallback
+    row = {
+        "id": investor_id,
+        "owner_id": owner_id,
+        "display_name": display_name,
+        "email": email,
+        "firm": firm,
+        "is_verified": False,
+        "verification_status": "unverified",
+        "verification_score": 40,
+        "cv_filename": None,
+        "cv_text": None,
+        "created_at": datetime.utcnow().isoformat() + "Z",
+    }
+    _INVESTORS[investor_id] = row
+    return row
+
+
 @app.get("/investors")
 async def list_investors() -> list[dict[str, Any]]:
     rows = await db.fetch("SELECT * FROM public.investors ORDER BY created_at DESC")
@@ -521,14 +579,35 @@ async def upload_cv_file(investor_id: str, file: UploadFile = File(...)) -> dict
 
 
 
+async def _resolve_investor(investor_id: str) -> dict[str, Any] | None:
+    """Resolve investor by id, then owner_id, then email-shaped id fallbacks."""
+    inv = await db.fetchrow("SELECT * FROM public.investors WHERE id = $1", investor_id)
+    if inv:
+        return inv
+    if investor_id in _INVESTORS:
+        return dict(_INVESTORS[investor_id])
+    # Profile id used by mistake → find by owner_id
+    inv = await db.fetchrow("SELECT * FROM public.investors WHERE owner_id = $1 LIMIT 1", investor_id)
+    if inv:
+        return inv
+    return None
+
+
 @app.post("/investors/{investor_id}/verify")
 async def verify_investor(investor_id: str) -> dict[str, Any]:
     """Run AI CV Verification for investor."""
-    inv = await db.fetchrow("SELECT * FROM public.investors WHERE id = $1", investor_id)
+    inv = await _resolve_investor(investor_id)
     if not inv:
-        inv = _INVESTORS.get(investor_id)
-    if not inv:
-        raise HTTPException(status_code=404, detail="Investor not found")
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                f"Investor not found for id '{investor_id}'. "
+                "Re-login so your profile.investor_id is repaired, or register again."
+            ),
+        )
+
+    # Always use the canonical investors.id for persistence
+    investor_id = inv.get("id") or investor_id
 
     verify_payload = {
         "display_name": inv.get("display_name"),

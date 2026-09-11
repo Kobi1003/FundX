@@ -168,16 +168,19 @@ async def verify_investor_endpoint(payload: dict[str, Any]) -> dict[str, Any]:
     )
     
     report_dict = report.model_dump()
-    is_verified = report.overall_status in ["VERIFIED", "PARTIALLY_VERIFIED"]
-    
+    status_val = getattr(report.overall_status, "value", report.overall_status)
+    strength_val = getattr(report.overall_evidence_strength, "value", report.overall_evidence_strength)
+    is_verified = status_val in ("VERIFIED", "PARTIALLY_VERIFIED")
+    verdict = getattr(getattr(report, "overall_assessment", None), "verdict", None) or status_val
+
     # Backwards-compatibility metadata alongside rich evidence-first report
     return {
-        "status": report.overall_status.value.lower(),
+        "status": str(status_val).lower(),
         "is_verified": is_verified,
-        "score": 90 if report.overall_evidence_strength.value == "HIGH" else (75 if report.overall_evidence_strength.value == "MEDIUM" else 45),
-        "overall_evidence_strength": report.overall_evidence_strength.value,
-        "overall_status": report.overall_status.value,
-        "summary": report.summary,
+        "score": 90 if strength_val == "HIGH" else (75 if strength_val == "MEDIUM" else 45),
+        "overall_evidence_strength": strength_val,
+        "overall_status": status_val,
+        "summary": verdict,
         "due_diligence_report": report_dict,
         "report": report_dict,
     }

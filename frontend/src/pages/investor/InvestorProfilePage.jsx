@@ -33,29 +33,53 @@ export default function InvestorProfilePage() {
   const [verifying, setVerifying] = useState(false)
   const [alert, setAlert] = useState(null)
 
-  const investorId = user?.investor_id || 'investor-elena'
+  const [resolvedInvestorId, setResolvedInvestorId] = useState(user?.investor_id || null)
+  const investorId = resolvedInvestorId || user?.investor_id || 'investor-elena'
   const isVerified = Boolean(user?.is_verified)
 
   useEffect(() => {
-    api
-      .getInvestor(investorId)
-      .then((data) => {
-        if (data) {
-          setForm({
-            display_name: data.display_name || user?.full_name || '',
-            email: data.email || user?.email || '',
-            firm: data.firm || '',
-            bio: data.bio || '',
-            cv_filename: data.cv_filename || '',
-            cv_text: data.cv_text || '',
+    let cancelled = false
+    async function loadInvestor() {
+      setLoading(true)
+      try {
+        let data = user?.investor_id ? await api.getInvestor(user.investor_id) : null
+        if (!data) {
+          data = await api.ensureInvestor({
+            owner_id: user?.id,
+            email: user?.email,
+            display_name: user?.full_name,
+            firm: user?.firm,
+            investor_id: user?.investor_id || undefined,
           })
-          if (data.preferences) setPreferences((p) => ({ ...p, ...data.preferences }))
-          if (data.verification_report) setReport(data.verification_report)
         }
-      })
-      .catch((err) => console.error(err))
-      .finally(() => setLoading(false))
-  }, [investorId, user])
+        if (cancelled || !data) return
+        if (data.id && data.id !== user?.investor_id) {
+          setResolvedInvestorId(data.id)
+          updateActiveUser({ investor_id: data.id, firm: data.firm, is_verified: data.is_verified })
+        } else if (data.id) {
+          setResolvedInvestorId(data.id)
+        }
+        setForm({
+          display_name: data.display_name || user?.full_name || '',
+          email: data.email || user?.email || '',
+          firm: data.firm || '',
+          bio: data.bio || '',
+          cv_filename: data.cv_filename || '',
+          cv_text: data.cv_text || '',
+        })
+        if (data.preferences) setPreferences((p) => ({ ...p, ...data.preferences }))
+        if (data.verification_report) setReport(data.verification_report)
+      } catch (err) {
+        console.error(err)
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    loadInvestor()
+    return () => {
+      cancelled = true
+    }
+  }, [user?.id, user?.investor_id, user?.email])
 
   const handleSaveProfile = async (e) => {
     e.preventDefault()

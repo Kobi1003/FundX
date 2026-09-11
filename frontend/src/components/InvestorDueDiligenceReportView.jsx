@@ -58,7 +58,7 @@ export default function InvestorDueDiligenceReportView({ report }) {
   const desigName = claimed_designation || designation || ''
 
   const {
-    verdict = 'HIGH PUBLIC CORROBORATION — SELECTIVE PRIMARY AUDIT RECOMMENDED',
+    verdict = 'ASSESSMENT UNAVAILABLE — RE-RUN VERIFICATION',
     evidence_coverage_pct = 0,
     strongly_corroborated = [],
     requires_verification = [],
@@ -66,8 +66,8 @@ export default function InvestorDueDiligenceReportView({ report }) {
   } = overall_assessment
 
   const {
-    identity_confidence = 'HIGH',
-    homonym_collision_risk = 'LOW',
+    identity_confidence = 'UNKNOWN',
+    homonym_collision_risk = 'UNKNOWN',
     distinct_public_hosts = [],
   } = identity_resolution
 

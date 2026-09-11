@@ -452,23 +452,58 @@ async def register(payload: dict[str, Any]) -> dict[str, Any]:
         # 1. Insert profile FIRST to satisfy foreign key in investors.owner_id
         await db.execute(
             """
-            INSERT INTO public.profiles (id, email, password_hash, full_name, role, is_verified, cin)
-            VALUES ($1, $2, $3, $4, 'investor', $5, $6)
-            ON CONFLICT (id) DO NOTHING
+            INSERT INTO public.profiles (id, email, password_hash, full_name, role, is_verified, cin, investor_id)
+            VALUES ($1, $2, $3, $4, 'investor', $5, $6, $7)
+            ON CONFLICT (id) DO UPDATE SET
+                investor_id = COALESCE(EXCLUDED.investor_id, profiles.investor_id),
+                full_name = EXCLUDED.full_name,
+                is_verified = EXCLUDED.is_verified
             """,
-            user_id, email, password, name, is_verified, cin if cin else None
+            user_id, email, password, name, is_verified, cin if cin else None, investor_id
         )
 
-        # 2. Create investor in PostgreSQL
-        await db.execute(
+        # 2. Create investor in PostgreSQL (gst_number/cin columns ensured by migrations)
+        insert_ok = await db.execute(
             """
-            INSERT INTO public.investors (id, owner_id, display_name, email, firm, is_verified, 
+            INSERT INTO public.investors (id, owner_id, display_name, email, firm, is_verified,
                                          verification_status, verification_score, verification_timestamp, cin, gst_number)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-            ON CONFLICT (id) DO NOTHING
+            ON CONFLICT (id) DO UPDATE SET
+                owner_id = EXCLUDED.owner_id,
+                display_name = EXCLUDED.display_name,
+                email = EXCLUDED.email,
+                firm = EXCLUDED.firm,
+                updated_at = NOW()
             """,
             investor_id, user_id, name, email, firm, is_verified, verification_status, verification_score,
             datetime.utcnow() if is_verified else None, cin if cin else None, gst_number if gst_number else None
+        )
+        if insert_ok is None:
+            # Fallback without optional columns if schema lagging
+            insert_ok = await db.execute(
+                """
+                INSERT INTO public.investors (id, owner_id, display_name, email, firm, is_verified, verification_status, verification_score)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                ON CONFLICT (id) DO UPDATE SET
+                    owner_id = EXCLUDED.owner_id,
+                    display_name = EXCLUDED.display_name,
+                    email = EXCLUDED.email,
+                    firm = EXCLUDED.firm,
+                    updated_at = NOW()
+                """,
+                investor_id, user_id, name, email, firm, is_verified, verification_status, verification_score,
+            )
+        if insert_ok is None:
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to create investor record in database. Check server logs / migrations.",
+            )
+
+        # Ensure profile.investor_id is linked (covers older insert path)
+        await db.execute(
+            "UPDATE public.profiles SET investor_id = $2 WHERE id = $1",
+            user_id,
+            investor_id,
         )
 
         # Notify investor-service if available
@@ -537,16 +572,48 @@ async def login(payload: LoginRequest) -> dict[str, Any]:
     # 1. Look up by exact email in DB
     user_row = await db.fetchrow("SELECT * FROM public.profiles WHERE LOWER(email) = $1", email)
     if user_row:
-        # Enrich startup_name or firm if missing
+        # Enrich startup_name or firm if missing; repair missing investor_id link
         if user_row.get("role") == "startup" and user_row.get("startup_id"):
             startup = await db.fetchrow("SELECT name, industry FROM public.startups WHERE id = $1", user_row["startup_id"])
             if startup:
                 user_row["startup_name"] = startup.get("name")
                 user_row["industry"] = startup.get("industry")
-        elif user_row.get("role") == "investor" and user_row.get("investor_id"):
-            inv = await db.fetchrow("SELECT firm FROM public.investors WHERE id = $1", user_row["investor_id"])
+        elif user_row.get("role") == "investor":
+            inv = None
+            if user_row.get("investor_id"):
+                inv = await db.fetchrow("SELECT * FROM public.investors WHERE id = $1", user_row["investor_id"])
+            if not inv:
+                inv = await db.fetchrow(
+                    "SELECT * FROM public.investors WHERE owner_id = $1 OR LOWER(email) = LOWER($2) ORDER BY created_at DESC LIMIT 1",
+                    user_row["id"],
+                    email,
+                )
+            if not inv:
+                # Auto-heal: create investor row for orphan investor profiles
+                new_inv_id = f"investor-{uuid.uuid4().hex[:8]}"
+                created = await db.execute(
+                    """
+                    INSERT INTO public.investors (id, owner_id, display_name, email, firm, is_verified, verification_status, verification_score)
+                    VALUES ($1, $2, $3, $4, $5, FALSE, 'unverified', 40)
+                    ON CONFLICT (id) DO NOTHING
+                    """,
+                    new_inv_id,
+                    user_row["id"],
+                    user_row.get("full_name") or email.split("@")[0],
+                    email,
+                    "Private Angel",
+                )
+                if created is not None:
+                    inv = await db.fetchrow("SELECT * FROM public.investors WHERE id = $1", new_inv_id)
             if inv:
+                user_row["investor_id"] = inv["id"]
                 user_row["firm"] = inv.get("firm")
+                user_row["is_verified"] = inv.get("is_verified", user_row.get("is_verified"))
+                await db.execute(
+                    "UPDATE public.profiles SET investor_id = $2 WHERE id = $1",
+                    user_row["id"],
+                    inv["id"],
+                )
         return {"message": "Login successful", "user": user_row}
 
     # 2. Check in-memory profiles by email

@@ -141,6 +141,8 @@ export const api = {
   // Investors
   listInvestors: () => request('/api/investors'),
   getInvestor: (id) => request(`/api/investors/${id}`).catch(() => null),
+  ensureInvestor: (body) =>
+    request('/api/investors/ensure', { method: 'POST', body: JSON.stringify(body) }),
   createInvestor: (body) =>
     request('/api/investors', { method: 'POST', body: JSON.stringify(body) }),
   updateInvestor: (id, body) =>

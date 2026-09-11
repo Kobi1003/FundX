@@ -29,6 +29,7 @@ ADD COLUMN IF NOT EXISTS gst_verification_report JSONB;
 -- Add CIN column to investors
 ALTER TABLE IF EXISTS public.investors
 ADD COLUMN IF NOT EXISTS cin TEXT,
+ADD COLUMN IF NOT EXISTS gst_number TEXT,
 ADD COLUMN IF NOT EXISTS verification_status TEXT DEFAULT 'unverified',
 ADD COLUMN IF NOT EXISTS is_verified BOOLEAN DEFAULT FALSE,
 ADD COLUMN IF NOT EXISTS verification_score INTEGER DEFAULT 0,
