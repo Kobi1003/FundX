@@ -1,13 +1,22 @@
-import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuthContext } from '../context/AuthContext'
 import api from '../services/api'
 
 export default function RegisterPage() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { setUser } = useAuthContext()
 
-  const [roleTab, setRoleTab] = useState('startup') // 'startup' or 'investor'
+  const initialRole = searchParams.get('role') === 'investor' ? 'investor' : 'startup'
+  const [roleTab, setRoleTab] = useState(initialRole)
+
+  useEffect(() => {
+    const paramRole = searchParams.get('role')
+    if (paramRole === 'investor' || paramRole === 'startup') {
+      setRoleTab(paramRole)
+    }
+  }, [searchParams])
 
   // Startup form fields
   const [startupForm, setStartupForm] = useState({
@@ -72,10 +81,8 @@ export default function RegisterPage() {
     <div className="max-w-xl mx-auto py-8">
       <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-md">
         {/* Header */}
-        <div className="text-center mb-6">
-          <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-[#0f3d2e] to-[#1c5c46] text-white font-black text-xl mb-3 shadow-xs">
-            FX
-          </div>
+        <div className="text-center mb-6 flex flex-col items-center">
+          <img src="/logoidea.jpeg" alt="FundX Logo" className="h-14 w-auto mb-3 object-contain rounded-lg" />
           <h1 className="text-2xl font-black tracking-tight text-slate-900">Create Your FundX Account</h1>
           <p className="text-xs text-slate-500 mt-1">
             Choose your account role to join the autonomous investment arena

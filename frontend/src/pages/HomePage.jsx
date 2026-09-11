@@ -3,11 +3,14 @@ import { useAuthContext } from '../context/AuthContext'
 
 export default function HomePage() {
   const navigate = useNavigate()
-  const { loginAs } = useAuthContext()
+  const { user } = useAuthContext()
 
-  const handlePortalEntry = (roleKey, path) => {
-    loginAs(roleKey)
-    navigate(path)
+  const handlePortalEntry = (targetRole, path) => {
+    if (user?.role === targetRole) {
+      navigate(path)
+    } else {
+      navigate('/login')
+    }
   }
 
   return (
@@ -38,7 +41,7 @@ export default function HomePage() {
               to="/login"
               className="rounded-xl bg-white/10 hover:bg-white/20 text-white border border-white/20 px-6 py-3.5 text-xs font-bold transition backdrop-blur-xs"
             >
-              Demo Evaluation Logins →
+              Sign In to Account →
             </Link>
           </div>
         </div>
@@ -53,7 +56,7 @@ export default function HomePage() {
         <div className="text-center max-w-2xl mx-auto mb-8">
           <h2 className="text-2xl font-black text-slate-900 tracking-tight">Platform Portals & Workflows</h2>
           <p className="text-xs text-slate-500 mt-1">
-            Seamlessly navigate between all three fully wired platform modules.
+            Access your isolated role portal: Super Admin, Startup Founder, or Investor Syndicate.
           </p>
         </div>
 
@@ -95,7 +98,7 @@ export default function HomePage() {
               onClick={() => handlePortalEntry('admin', '/admin/dashboard')}
               className="mt-6 w-full rounded-xl bg-slate-900 hover:bg-slate-800 text-white py-2.5 text-xs font-bold transition shadow-xs cursor-pointer"
             >
-              Enter Super Admin Portal →
+              {user?.role === 'admin' ? 'Enter Super Admin Portal →' : 'Sign In as Admin →'}
             </button>
           </div>
 
@@ -136,7 +139,7 @@ export default function HomePage() {
               onClick={() => handlePortalEntry('startup', '/startup/dashboard')}
               className="mt-6 w-full rounded-xl bg-[#0f3d2e] hover:bg-[#165540] text-white py-2.5 text-xs font-bold transition shadow-xs cursor-pointer"
             >
-              Enter Startup Portal →
+              {user?.role === 'startup' ? 'Enter Startup Portal →' : 'Sign In / Register as Startup →'}
             </button>
           </div>
 
@@ -177,7 +180,7 @@ export default function HomePage() {
               onClick={() => handlePortalEntry('investor', '/investor/dashboard')}
               className="mt-6 w-full rounded-xl bg-slate-900 hover:bg-slate-800 text-white py-2.5 text-xs font-bold transition shadow-xs cursor-pointer"
             >
-              Enter Investor Portal →
+              {user?.role === 'investor' ? 'Enter Investor Portal →' : 'Sign In / Register as Investor →'}
             </button>
           </div>
         </div>
