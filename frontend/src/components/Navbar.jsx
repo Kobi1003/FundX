@@ -1,5 +1,6 @@
 import { Link, NavLink } from 'react-router-dom'
-import { Cpu, LayoutDashboard, Rocket, Users, Handshake, ShieldCheck } from 'lucide-react'
+import { LayoutDashboard, Rocket, Users, Handshake, ShieldCheck } from 'lucide-react'
+import Logo from './Logo'
 
 const navItems = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -12,18 +13,8 @@ export default function Navbar() {
   return (
     <header className="sticky top-0 z-50 border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-md">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6">
-        <Link to="/" className="flex items-center gap-2.5 text-lg font-bold tracking-tight text-white group">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-400 to-teal-600 shadow-md shadow-emerald-500/20 group-hover:scale-105 transition-transform">
-            <Cpu className="h-5 w-5 text-slate-950" />
-          </div>
-          <div>
-            <span className="bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">
-              FundX
-            </span>
-            <span className="ml-2 hidden rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-400 border border-emerald-500/20 sm:inline-block">
-              v1.0 Demo
-            </span>
-          </div>
+        <Link to="/" className="flex items-center group">
+          <Logo size="md" />
         </Link>
 
         <nav className="flex items-center gap-1.5 sm:gap-2">

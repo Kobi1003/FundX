@@ -49,7 +49,7 @@ export function AuthProvider({ children }) {
     } catch {
       // ignore
     }
-    return DEMO_ACCOUNTS.startup
+    return null
   })
   const [loading, setLoading] = useState(false)
 
