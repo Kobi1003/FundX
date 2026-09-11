@@ -51,6 +51,16 @@ Financial projections are executed strictly in Python code (`app/simulation/`):
 - `runway_model.py`: Simulates monthly net burn and runway survival in months.
 - `valuation_model.py`: Calculates post-money valuation, pre-money valuation, and dilution.
 - `scenarios.py`: Runs **Bull**, **Base**, and **Bear** cases simultaneously.
+- `simulator.py`: Produces a complete monthly forecast of cohort customers,
+  revenue, CAC/LTV, costs, cash, funding, break-even and machine-readable risks.
+  Monthly growth decays as `g_m = g_0 × (1 - growth_decay_rate)^(m-1)`.
+- `sensitivity.py`: Performs deterministic one-way ±10% sensitivity tests for
+  growth, CAC, churn, gross margin and operating costs.
+
+Outputs are scenario-based projections from supplied assumptions, not financial
+advice or a prediction of actual performance. The request supports `claimed`
+and `verified` simulation cases. Verified mode only replaces metrics with an
+explicit `verified_value` and returns both the original and effective inputs.
 
 ---
 

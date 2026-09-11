@@ -205,6 +205,11 @@ export const api = {
     request('/api/ai/negotiation', { method: 'POST', body: JSON.stringify(body) }),
   simulate: (body) =>
     request('/api/ai/simulate', { method: 'POST', body: JSON.stringify(body) }),
+  runSimulationScenarios: (body) =>
+    request('/api/ai/simulation/scenarios', { method: 'POST', body: JSON.stringify(body) }),
+  runSimulationSensitivity: (body) =>
+    request('/api/ai/simulation/sensitivity', { method: 'POST', body: JSON.stringify(body) }),
+  getSimulation: (id) => request(`/api/ai/simulation/${id}`),
   demoSample: () => request('/api/ai/demo/sample'),
 }
 
