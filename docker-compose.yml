@@ -1,0 +1,161 @@
+# AI Investment Arena
+#
+# Architecture: React → API Gateway → Microservices → Supabase + Neo4j → AI (Google ADK)
+# Supabase = managed Auth/Postgres/Storage (hosted). Not the application backend.
+
+services:
+  neo4j:
+    image: neo4j:5-community
+    container_name: fundx-neo4j
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    environment:
+      NEO4J_AUTH: ${NEO4J_AUTH:-neo4j/fundx_neo4j_password}
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+    healthcheck:
+      test: ["CMD", "cypher-shell", "-u", "neo4j", "-p", "fundx_neo4j_password", "RETURN 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 40s
+    networks:
+      - fundx
+
+  user-service:
+    build:
+      context: ./backend
+      dockerfile: user-service/Dockerfile
+    container_name: fundx-user-service
+    env_file: .env
+    environment:
+      SERVICE_NAME: user-service
+      PORT: 8001
+    ports:
+      - "8001:8001"
+    depends_on:
+      neo4j:
+        condition: service_healthy
+    networks:
+      - fundx
+
+  startup-service:
+    build:
+      context: ./backend
+      dockerfile: startup-service/Dockerfile
+    container_name: fundx-startup-service
+    env_file: .env
+    environment:
+      SERVICE_NAME: startup-service
+      PORT: 8002
+    ports:
+      - "8002:8002"
+    depends_on:
+      neo4j:
+        condition: service_healthy
+    networks:
+      - fundx
+
+  investor-service:
+    build:
+      context: ./backend
+      dockerfile: investor-service/Dockerfile
+    container_name: fundx-investor-service
+    env_file: .env
+    environment:
+      SERVICE_NAME: investor-service
+      PORT: 8003
+    ports:
+      - "8003:8003"
+    depends_on:
+      neo4j:
+        condition: service_healthy
+    networks:
+      - fundx
+
+  deal-service:
+    build:
+      context: ./backend
+      dockerfile: deal-service/Dockerfile
+    container_name: fundx-deal-service
+    env_file: .env
+    environment:
+      SERVICE_NAME: deal-service
+      PORT: 8004
+    ports:
+      - "8004:8004"
+    depends_on:
+      neo4j:
+        condition: service_healthy
+    networks:
+      - fundx
+
+  ai-service:
+    build:
+      context: ./backend
+      dockerfile: ai-service/Dockerfile
+    container_name: fundx-ai-service
+    env_file: .env
+    environment:
+      SERVICE_NAME: ai-service
+      PORT: 8005
+      DEMO_MODE: ${DEMO_MODE:-true}
+      AI_PROVIDER: ${AI_PROVIDER:-mock}
+    ports:
+      - "8005:8005"
+    depends_on:
+      neo4j:
+        condition: service_healthy
+    networks:
+      - fundx
+
+  api-gateway:
+    build:
+      context: ./backend
+      dockerfile: api-gateway/Dockerfile
+    container_name: fundx-api-gateway
+    env_file: .env
+    environment:
+      SERVICE_NAME: api-gateway
+      PORT: 8000
+      USER_SERVICE_URL: http://user-service:8001
+      STARTUP_SERVICE_URL: http://startup-service:8002
+      INVESTOR_SERVICE_URL: http://investor-service:8003
+      DEAL_SERVICE_URL: http://deal-service:8004
+      AI_SERVICE_URL: http://ai-service:8005
+    ports:
+      - "8000:8000"
+    depends_on:
+      - user-service
+      - startup-service
+      - investor-service
+      - deal-service
+      - ai-service
+    networks:
+      - fundx
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:-}
+        VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY:-}
+    container_name: fundx-frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - api-gateway
+    networks:
+      - fundx
+
+volumes:
+  neo4j_data:
+  neo4j_logs:
+
+networks:
+  fundx:
+    driver: bridge
