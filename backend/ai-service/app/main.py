@@ -139,6 +139,11 @@ async def demo_sample() -> dict[str, Any]:
     }
 
 
+from app.investor_due_diligence.workflow import InvestorDueDiligenceWorkflow  # noqa: E402
+
+_due_diligence_workflow = InvestorDueDiligenceWorkflow()
+
+
 @app.post("/ai/verify/startup")
 async def verify_startup_endpoint(payload: dict[str, Any]) -> dict[str, Any]:
     return await run_startup_verifier(payload)
@@ -146,7 +151,36 @@ async def verify_startup_endpoint(payload: dict[str, Any]) -> dict[str, Any]:
 
 @app.post("/ai/verify/investor")
 async def verify_investor_endpoint(payload: dict[str, Any]) -> dict[str, Any]:
-    return await run_investor_cv_verifier(payload)
+    investor_name = payload.get("display_name") or payload.get("investor_name") or "Investor"
+    organization = payload.get("firm") or payload.get("organization") or "Private Angel"
+    designation = payload.get("designation") or payload.get("title") or "Partner"
+    bio = payload.get("bio")
+    cv_text = payload.get("cv_text")
+    cv_filename = payload.get("cv_filename")
+
+    report = await _due_diligence_workflow.run(
+        investor_name=investor_name,
+        organization=organization,
+        designation=designation,
+        bio=bio,
+        cv_text=cv_text,
+        cv_filename=cv_filename,
+    )
+    
+    report_dict = report.model_dump()
+    is_verified = report.overall_status in ["VERIFIED", "PARTIALLY_VERIFIED"]
+    
+    # Backwards-compatibility metadata alongside rich evidence-first report
+    return {
+        "status": report.overall_status.value.lower(),
+        "is_verified": is_verified,
+        "score": 90 if report.overall_evidence_strength.value == "HIGH" else (75 if report.overall_evidence_strength.value == "MEDIUM" else 45),
+        "overall_evidence_strength": report.overall_evidence_strength.value,
+        "overall_status": report.overall_status.value,
+        "summary": report.summary,
+        "due_diligence_report": report_dict,
+        "report": report_dict,
+    }
 
 
 @app.post("/ai/analyze-thesis")

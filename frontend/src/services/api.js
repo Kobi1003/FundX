@@ -151,6 +151,11 @@ export const api = {
   },
   uploadInvestorCvJson: (id, body) =>
     request(`/api/investors/${id}/upload-cv-json`, { method: 'POST', body: JSON.stringify(body) }),
+  uploadInvestorCvFile: (id, file) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return request(`/api/investors/${id}/upload-cv-file`, { method: 'POST', body: formData })
+  },
   verifyInvestor: (id) =>
     request(`/api/investors/${id}/verify`, { method: 'POST' }),
   getInvestorPreferences: (id) => request(`/api/investors/${id}/preferences`),

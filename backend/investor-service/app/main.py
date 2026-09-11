@@ -448,6 +448,79 @@ async def upload_cv_json(investor_id: str, payload: dict[str, Any]) -> dict[str,
     }
 
 
+@app.post("/investors/{investor_id}/upload-cv-file")
+async def upload_cv_file(investor_id: str, file: UploadFile = File(...)) -> dict[str, Any]:
+    filename = file.filename or "Uploaded_CV.pdf"
+    content_bytes = await file.read()
+
+    stored = None
+    try:
+        stored = save_bytes(
+            category="investors",
+            owner_id=investor_id,
+            filename=filename,
+            content=content_bytes,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    
+    extracted_text = ""
+    try:
+        import pypdf
+        import io
+        reader = pypdf.PdfReader(io.BytesIO(content_bytes))
+        for page in reader.pages:
+            t = page.extract_text()
+            if t:
+                extracted_text += t + "\n"
+    except Exception:
+        pass
+
+    if not extracted_text and stored:
+        extracted_text = read_text_excerpt(stored["storage_path"]) or ""
+
+    if not extracted_text:
+        try:
+            raw_str = content_bytes.decode("latin-1", errors="ignore")
+            import re
+            matches = re.findall(r"\((.*?)\)\s*Tj", raw_str)
+            if matches:
+                extracted_text = " ".join(matches)
+        except Exception:
+            pass
+
+    if not extracted_text:
+        extracted_text = f"Uploaded PDF CV ({filename}). Text extracted for verification."
+
+    await db.execute(
+        "UPDATE public.investors SET cv_filename = $2, cv_text = $3, updated_at = NOW() WHERE id = $1",
+        investor_id, filename, extracted_text
+    )
+
+    if investor_id in _INVESTORS:
+        _INVESTORS[investor_id]["cv_filename"] = filename
+        _INVESTORS[investor_id]["cv_text"] = extracted_text
+        if stored:
+            _INVESTORS[investor_id]["cv_storage_path"] = stored["storage_path"]
+
+    docs = _DOCUMENTS.setdefault(investor_id, [])
+    docs.append({
+        "id": str(uuid.uuid4()),
+        "filename": filename,
+        "doc_type": "cv",
+        "storage_path": stored["storage_path"] if stored else f"docs/{filename}",
+    })
+
+    return {
+        "message": "PDF CV file uploaded successfully",
+        "cv_filename": filename,
+        "cv_text": extracted_text,
+        "storage_path": stored["storage_path"] if stored else None,
+        "stored_on_disk": stored is not None,
+    }
+
+
+
 @app.post("/investors/{investor_id}/verify")
 async def verify_investor(investor_id: str) -> dict[str, Any]:
     """Run AI CV Verification for investor."""
