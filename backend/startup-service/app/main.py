@@ -10,7 +10,7 @@ import uuid
 from typing import Any
 from datetime import datetime
 import httpx
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
 sys.path.insert(0, "/app")
@@ -18,6 +18,7 @@ sys.path.insert(0, "/app")
 from shared.neo4j_client import health_check as neo4j_health  # noqa: E402
 from shared.supabase_client import supabase_configured  # noqa: E402
 from shared import db  # noqa: E402
+from shared.local_storage import read_text_excerpt, save_bytes  # noqa: E402
 
 logger = logging.getLogger("fundx.startup-service")
 
@@ -113,7 +114,7 @@ _STARTUPS: dict[str, dict[str, Any]] = {
 
 _DOCUMENTS: dict[str, list[dict[str, Any]]] = {
     "startup-aerogrid": [
-        {"id": "doc-1", "filename": "AEROGRID_INCORPORATION_ROC_2024.pdf", "doc_type": "incorporation", "storage_path": "docs/inc_aerogrid.pdf"},
+        {"id": "doc-1", "filename": "AEROGRID_INCORPORATION_DEMO.txt", "doc_type": "incorporation", "storage_path": "demo_docs/AEROGRID_INCORPORATION_DEMO.txt"},
         {"id": "doc-2", "filename": "GST_REGISTRATION_CERT_2024.pdf", "doc_type": "gst", "storage_path": "docs/gst_aerogrid.pdf"},
         {"id": "doc-3", "filename": "AeroGrid_Pitch_Deck_Q3.pdf", "doc_type": "pitch_deck", "storage_path": "docs/pitch_aerogrid.pdf"},
     ],
@@ -311,7 +312,7 @@ async def verify_startup(startup_id: str) -> dict[str, Any]:
 
     report = None
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.post(f"{AI_SERVICE_URL}/ai/verify/startup", json=verify_payload)
             if resp.status_code == 200:
                 report = resp.json()
@@ -325,23 +326,42 @@ async def verify_startup(startup_id: str) -> dict[str, Any]:
         score = 92 if (valid_gst and has_inc) else (78 if has_inc else 55)
         is_ver = score >= 70
         report = {
-            "status": "verified" if is_ver else "action_required",
+            "status": "ai_assessed" if is_ver else "action_required",
             "is_verified": is_ver,
             "score": score,
-            "verified_badge": "AI Verified" if is_ver else "Unverified",
-            "summary": f"AI Background check completed for {startup.get('name')}. Compliance confidence score: {score}/100. Entity verified for marketplace deals.",
+            "verified_badge": "AI Background Assessment" if is_ver else "Unassessed",
+            "summary": (
+                f"AI Background Assessment for {startup.get('name')}. "
+                f"Confidence score: {score}/100. Not a legal ROC/MCA authentication."
+            ),
             "audit_checks": [
-                {"check": "GSTIN Structure & Registry Validation", "status": "PASS" if valid_gst else "FLAGGED", "detail": f"GST: {gst or 'Not provided'}"},
-                {"check": "Certificate of Incorporation (ROC/MCA)", "status": "PASS" if has_inc else "PENDING", "detail": "Incorporation documents validated"},
-                {"check": "Sector Regulatory Clearance", "status": "PASS", "detail": f"Sector regulatory standards cleared for {startup.get('industry', 'Tech')}"},
-                {"check": "Entity Sanctions & Adverse Records", "status": "PASS", "detail": "Clean registry record"},
+                {
+                    "check": "GSTIN Format Check",
+                    "status": "PASS" if valid_gst else "FLAGGED",
+                    "detail": f"GST: {gst or 'Not provided'} (format heuristic only)",
+                },
+                {
+                    "check": "Incorporation Document Present",
+                    "status": "PASS" if has_inc else "PENDING",
+                    "detail": "Document filename/presence check — not official registry auth.",
+                },
+                {
+                    "check": "Sector Notes (Demo)",
+                    "status": "PASS",
+                    "detail": f"No seeded adverse flags for {startup.get('industry', 'Tech')}",
+                },
+                {
+                    "check": "Entity Self-Declaration",
+                    "status": "PASS",
+                    "detail": "Founder-provided profile data accepted for demo listing",
+                },
             ],
             "risk_level": "LOW" if score >= 80 else "MODERATE",
             "timestamp": datetime.utcnow().isoformat() + "Z",
         }
 
     is_verified = report.get("is_verified", True)
-    v_status = "verified" if is_verified else "action_required"
+    v_status = "ai_assessed" if is_verified else "action_required"
     v_score = report.get("score", 90)
 
     # Persist in PostgreSQL
@@ -382,6 +402,58 @@ async def list_documents(startup_id: str) -> list[dict[str, Any]]:
     if docs:
         return docs
     return _DOCUMENTS.get(startup_id, [])
+
+
+@app.post("/startups/{startup_id}/upload-document")
+async def upload_document(
+    startup_id: str,
+    file: UploadFile = File(...),
+    doc_type: str = Form("general"),
+) -> dict[str, Any]:
+    """Save startup document bytes under uploads/startups/<id>/."""
+    content = await file.read()
+    try:
+        stored = save_bytes(
+            category="startups",
+            owner_id=startup_id,
+            filename=file.filename or "document.txt",
+            content=content,
+            subfolder=doc_type or "general",
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    excerpt = read_text_excerpt(stored["storage_path"])
+    doc_id = f"doc-{uuid.uuid4().hex[:6]}"
+    await db.execute(
+        "INSERT INTO public.startup_documents (id, startup_id, filename, doc_type, storage_path) VALUES ($1, $2, $3, $4, $5)",
+        doc_id,
+        startup_id,
+        stored["filename"],
+        doc_type or "general",
+        stored["storage_path"],
+    )
+
+    if doc_type == "incorporation":
+        await db.execute(
+            "UPDATE public.startups SET incorporation_cert = $2, updated_at = NOW() WHERE id = $1",
+            startup_id,
+            stored["filename"],
+        )
+        if startup_id in _STARTUPS:
+            _STARTUPS[startup_id]["incorporation_cert"] = stored["filename"]
+
+    doc = {
+        "id": doc_id,
+        "startup_id": startup_id,
+        "filename": stored["filename"],
+        "doc_type": doc_type or "general",
+        "storage_path": stored["storage_path"],
+        "text_excerpt": (excerpt or "")[:500],
+        "stored_on_disk": True,
+    }
+    _DOCUMENTS.setdefault(startup_id, []).append(doc)
+    return doc
 
 
 @app.post("/startups/{startup_id}/documents")

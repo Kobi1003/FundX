@@ -1,9 +1,9 @@
 """
-Google ADK integration point.
+Google ADK integration + bounded AgentRunner.
 
-Do NOT fake ADK APIs. Import and wrap real google.adk types when implementing
-full agent graphs. Until then, workflows call providers through AgentRunner
-with a hard call budget.
+When google-adk is installed and DEMO_MODE=false, workflows may build a
+SequentialAgent graph. Until then (and on any failure), AgentRunner executes
+agents via the provider abstraction with a hard call budget.
 """
 
 from __future__ import annotations
@@ -17,14 +17,7 @@ from app.usage.tracker import UsageTracker
 
 
 class ADKIntegrationPoint:
-    """
-    Placeholder for real Google ADK Agent / Runner wiring.
-
-    Example (when implementing):
-        from google.adk.agents import Agent
-        from google.adk.runners import Runner
-        ...
-    """
+    """Detects and optionally builds a Google ADK SequentialAgent pipeline."""
 
     def __init__(self) -> None:
         self.settings = get_settings()
@@ -43,10 +36,76 @@ class ADKIntegrationPoint:
     def available(self) -> bool:
         return self._adk_available
 
+    def build_startup_sequential_agent(self) -> Any | None:
+        """
+        Build ADK SequentialAgent for startup analysis when packages are present.
+
+        Returns None if ADK / genai are unavailable — callers must fall back.
+        """
+        if not self._adk_available or self.settings.demo_mode:
+            return None
+        try:
+            from google.adk.agents import LlmAgent, SequentialAgent
+        except Exception:
+            try:
+                from google.adk.agents import Agent as LlmAgent  # type: ignore
+                from google.adk.agents import SequentialAgent  # type: ignore
+            except Exception:
+                return None
+
+        model = "gemini-2.0-flash"
+        api_key = self.settings.gemini_api_key
+        if not api_key:
+            return None
+
+        def _agent(name: str, instruction: str) -> Any:
+            try:
+                return LlmAgent(name=name, model=model, instruction=instruction)
+            except TypeError:
+                return LlmAgent(name=name, model=model, instruction=instruction)  # noqa: TRY300
+
+        document = _agent(
+            "document_intelligence",
+            "Extract claims and evidence status from startup materials. Return concise bullets.",
+        )
+        market = _agent(
+            "market_research",
+            "Assess TAM/SAM/SOM claims and market risks. Be concise.",
+        )
+        competition = _agent(
+            "competition",
+            "Map competitors and defensibility. Be concise.",
+        )
+        financial = _agent(
+            "financial_extract",
+            "Extract numeric assumptions (CAC, churn, growth). Do not compute projections.",
+        )
+        red_team = _agent(
+            "red_team",
+            "Challenge the riskiest assumptions with specific diligence questions.",
+        )
+        synthesizer = _agent(
+            "investment_analyst",
+            "Synthesize upstream findings into an investment readiness summary.",
+        )
+
+        try:
+            return SequentialAgent(
+                name="startup_analysis_pipeline",
+                sub_agents=[document, market, competition, financial, red_team, synthesizer],
+            )
+        except Exception:
+            return None
+
     def build_runner_notes(self) -> dict[str, Any]:
         return {
             "adk_installed": self._adk_available,
-            "note": "Wire google.adk Agent/Runner here for production agent graphs.",
+            "demo_mode": self.settings.demo_mode,
+            "sequential_agent_ready": self.build_startup_sequential_agent() is not None,
+            "note": (
+                "Install google-adk + set GEMINI_API_KEY and DEMO_MODE=false to enable ADK graphs. "
+                "AgentRunner remains the reliable demo path."
+            ),
         }
 
 
@@ -76,4 +135,5 @@ class AgentRunner:
             "provider": used,
             "tokens_used": 0,
             "from_cache": False,
+            "adk_available": self.adk.available,
         }

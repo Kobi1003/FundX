@@ -89,8 +89,12 @@ services:
       SERVICE_NAME: startup-service
       PORT: 8002
       DATABASE_URL: postgresql://fundx_user:fundx_password@postgres:5432/fundx_db
+      UPLOAD_ROOT: /app/uploads
+      AI_SERVICE_URL: http://ai-service:8005
     ports:
       - "8002:8002"
+    volumes:
+      - ./uploads:/app/uploads
     depends_on:
       neo4j:
         condition: service_healthy
@@ -109,8 +113,12 @@ services:
       SERVICE_NAME: investor-service
       PORT: 8003
       DATABASE_URL: postgresql://fundx_user:fundx_password@postgres:5432/fundx_db
+      UPLOAD_ROOT: /app/uploads
+      AI_SERVICE_URL: http://ai-service:8005
     ports:
       - "8003:8003"
+    volumes:
+      - ./uploads:/app/uploads
     depends_on:
       neo4j:
         condition: service_healthy
@@ -150,8 +158,17 @@ services:
       PORT: 8005
       DEMO_MODE: ${DEMO_MODE:-true}
       AI_PROVIDER: ${AI_PROVIDER:-mock}
+      MOCK_RESEARCH: ${MOCK_RESEARCH:-true}
+      UPLOAD_ROOT: /app/uploads
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-${GEMINI_API_KEY:-}}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      MAX_AI_CALLS_PER_WORKFLOW: ${MAX_AI_CALLS_PER_WORKFLOW:-8}
+      MAX_AI_RETRIES: ${MAX_AI_RETRIES:-2}
     ports:
       - "8005:8005"
+    volumes:
+      - ./uploads:/app/uploads
     depends_on:
       neo4j:
         condition: service_healthy

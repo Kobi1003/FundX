@@ -1,0 +1,7 @@
+*
+!.gitignore
+!README.md
+!demo_cvs/
+!demo_cvs/**
+!demo_docs/
+!demo_docs/**

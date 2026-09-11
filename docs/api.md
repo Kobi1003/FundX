@@ -87,7 +87,18 @@ Returns gateway health and aggregated downstream microservice probe statuses.
 ## 6. AI Service (`/api/ai/*`)
 
 - `POST /api/ai/startup-analysis`: Run complete multi-agent analysis workflow.
+- `POST /api/ai/jobs/startup-analysis`: Create async analysis job.
+- `GET /api/ai/jobs/{job_id}`: Poll analysis job status.
 - `POST /api/ai/investor-analysis`: Run investor profile extraction and background research.
 - `POST /api/ai/negotiation`: Evaluate offer terms and calculate dilution/runway impact.
 - `POST /api/ai/simulate`: Run deterministic financial simulation (Bull / Base / Bear cases).
+- `POST /api/ai/verify/startup`: Startup **AI Background Assessment** (not legal KYC).
+- `POST /api/ai/verify/investor`: Investor **AI Background Assessment** from CV text.
+- `POST /api/ai/analyze-thesis`: Thesis feasibility + deterministic simulation + insights.
 - `GET /api/ai/demo/sample`: Fetch seeded sample startup & investor payload for testing.
+
+### Local document uploads (repo `uploads/`)
+
+- `POST /api/investors/{id}/upload-cv` — multipart file → `uploads/investors/<id>/`
+- `POST /api/investors/{id}/upload-cv-json` — JSON filename + text saved as `.txt`
+- `POST /api/startups/{id}/upload-document` — multipart file → `uploads/startups/<id>/`

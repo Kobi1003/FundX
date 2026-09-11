@@ -27,7 +27,9 @@ from app.workflows.investor_analysis import run_investor_analysis  # noqa: E402
 from app.workflows.negotiation import run_negotiation  # noqa: E402
 from app.workflows.startup_analysis import run_startup_analysis  # noqa: E402
 from app.agents.verifier_agent import run_startup_verifier, run_investor_cv_verifier  # noqa: E402
+from app.agents.orchestrator import ADKIntegrationPoint  # noqa: E402
 from app.workflows.thesis_analyzer import run_thesis_analysis  # noqa: E402
+from shared.local_storage import UPLOAD_ROOT  # noqa: E402
 
 SERVICE_NAME = os.getenv("SERVICE_NAME", "ai-service")
 
@@ -50,13 +52,17 @@ async def _execute_analysis_job(job_id: str, payload: StartupAnalysisRequest) ->
 @app.get("/health")
 async def health() -> dict[str, Any]:
     settings = get_settings()
+    adk = ADKIntegrationPoint()
     return {
         "status": "ok",
         "service": SERVICE_NAME,
         "demo_mode": settings.demo_mode,
         "ai_provider": settings.ai_provider,
+        "mock_research": settings.mock_research,
         "supabase_configured": supabase_configured(),
         "neo4j": neo4j_health(),
+        "upload_root": str(UPLOAD_ROOT),
+        "adk": adk.build_runner_notes(),
     }
 
 

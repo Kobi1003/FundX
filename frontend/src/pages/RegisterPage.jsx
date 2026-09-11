@@ -23,8 +23,14 @@ export default function RegisterPage() {
   const handleFileChange = (e) => {
     const file = e.target.files?.[0]
     if (file) {
-      if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
-        setError('Please select a valid PDF document for your Incorporation Certificate.')
+      const lower = file.name.toLowerCase()
+      const ok =
+        file.type === 'application/pdf' ||
+        lower.endsWith('.pdf') ||
+        lower.endsWith('.txt') ||
+        lower.endsWith('.md')
+      if (!ok) {
+        setError('Please select a PDF or text document for your Incorporation Certificate.')
         return
       }
       setCertFile(file)
@@ -71,6 +77,15 @@ export default function RegisterPage() {
         ...startupForm,
         incorporation_cert: certName,
       })
+      // Persist bytes to repo uploads/ when a real file was chosen
+      const startupId = res.user?.startup_id || res.startup_id || res.user?.id
+      if (certFile && startupId) {
+        try {
+          await api.uploadStartupDocument(startupId, certFile, 'incorporation')
+        } catch (uploadErr) {
+          console.warn('Incorporation file upload deferred:', uploadErr)
+        }
+      }
       setUser(res.user)
       setSuccess('Startup account registered successfully!')
       setTimeout(() => navigate('/startup/dashboard'), 800)

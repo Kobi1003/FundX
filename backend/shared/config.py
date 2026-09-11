@@ -34,10 +34,13 @@ class Settings:
         self.deal_service_url = os.getenv("DEAL_SERVICE_URL", "http://deal-service:8004")
         self.ai_service_url = os.getenv("AI_SERVICE_URL", "http://ai-service:8005")
 
-        self.gemini_api_key = os.getenv("GEMINI_API_KEY", "")
+        self.gemini_api_key = os.getenv("GEMINI_API_KEY", "") or os.getenv("GOOGLE_API_KEY", "")
         self.groq_api_key = os.getenv("GROQ_API_KEY", "")
         self.max_ai_retries = int(os.getenv("MAX_AI_RETRIES", "2"))
         self.max_ai_calls_per_workflow = int(os.getenv("MAX_AI_CALLS_PER_WORKFLOW", "8"))
+        self.mock_research = _bool(os.getenv("MOCK_RESEARCH"), default=True)
+        self.upload_root = os.getenv("UPLOAD_ROOT", "/app/uploads")
+        self.max_upload_bytes = int(os.getenv("MAX_UPLOAD_BYTES", str(5 * 1024 * 1024)))
 
 
 @lru_cache

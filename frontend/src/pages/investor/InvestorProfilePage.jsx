@@ -28,6 +28,9 @@ export default function InvestorProfilePage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [verifying, setVerifying] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [cvFile, setCvFile] = useState(null)
+  const [storagePath, setStoragePath] = useState(null)
   const [alert, setAlert] = useState(null)
 
   const investorId = user?.investor_id || 'investor-elena'
@@ -73,36 +76,92 @@ export default function InvestorProfilePage() {
     }
   }
 
-  const handleLoadSampleCv = () => {
-    setForm((prev) => ({
-      ...prev,
-      cv_filename: 'ELENA_ROSTOVA_PARTNER_CV_2026.pdf',
-      cv_text:
-        'Managing Partner at Apex Horizon Capital. 10+ years venture investment experience. Early-stage lead investor across 22 startups with 4 exits. FINRA certified accredited investor with high-net-worth institutional syndicate mandate.',
-    }))
+  const handleLoadSampleCv = async (which = 'elena') => {
+    const samples = {
+      elena: {
+        cv_filename: 'ELENA_ROSTOVA_CV.txt',
+        cv_text:
+          'Managing Partner at Apex Horizon Capital. 10+ years venture investment experience. Early-stage lead investor across 22 startups with 4 exits. FINRA certified accredited investor with high-net-worth institutional syndicate mandate.',
+      },
+      vikram: {
+        cv_filename: 'VIKRAM_MEHTA_CV.txt',
+        cv_text:
+          'Lead Syndicate Angel at Nexus. Prior VP Engineering. Active angel since 2018. Member of Indian Angel Network and AngelList. Checks $50k-$500k in FinTech and B2B SaaS.',
+      },
+    }
+    const sample = samples[which] || samples.elena
+    setForm((prev) => ({ ...prev, ...sample }))
+    setAlert({
+      type: 'success',
+      text: `Loaded demo CV text for ${sample.cv_filename}. Also upload the file from uploads/demo_cvs/ for on-disk storage.`,
+    })
+  }
+
+  const handleCvFileChange = (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setCvFile(file)
+    setForm((prev) => ({ ...prev, cv_filename: file.name }))
+  }
+
+  const handleUploadCv = async () => {
+    if (!cvFile && !form.cv_text) {
+      setAlert({ type: 'error', text: 'Choose a CV file or paste CV text first.' })
+      return
+    }
+    setUploading(true)
+    setAlert(null)
+    try {
+      const res = await api.uploadInvestorCv(investorId, {
+        file: cvFile || undefined,
+        filename: form.cv_filename,
+        cv_text: form.cv_text,
+      })
+      setStoragePath(res.storage_path)
+      setForm((prev) => ({
+        ...prev,
+        cv_filename: res.cv_filename || prev.cv_filename,
+        cv_text: res.cv_text_excerpt || prev.cv_text,
+      }))
+      setAlert({
+        type: 'success',
+        text: `CV stored locally at uploads/${res.storage_path || '(see server)'}.`,
+      })
+    } catch (err) {
+      setAlert({ type: 'error', text: err.message })
+    } finally {
+      setUploading(false)
+    }
   }
 
   const handleRunVerification = async () => {
-    if (!form.cv_filename && !form.cv_text) {
-      setAlert({ type: 'error', text: 'Please attach or enter your CV details before running verification.' })
+    if (!form.cv_filename && !form.cv_text && !cvFile) {
+      setAlert({ type: 'error', text: 'Please upload or enter your CV details before running assessment.' })
       return
     }
 
     setVerifying(true)
     setAlert(null)
     try {
-      // First save current CV details
-      await api.updateInvestor(investorId, form)
-      // Call AI verification
+      if (cvFile || form.cv_text) {
+        const up = await api.uploadInvestorCv(investorId, {
+          file: cvFile || undefined,
+          filename: form.cv_filename,
+          cv_text: form.cv_text,
+        })
+        setStoragePath(up.storage_path)
+      } else {
+        await api.updateInvestor(investorId, form)
+      }
       const res = await api.verifyInvestor(investorId)
       setReport(res.report)
       updateActiveUser({ is_verified: res.is_verified })
       setAlert({
         type: 'success',
-        text: `AI CV Verification complete! Credibility Score: ${res.verification_score}/100 • You are now AI Verified and authorized to negotiate deals!`,
+        text: `AI Background Assessment complete! Score: ${res.verification_score}/100 (not legal KYC).`,
       })
     } catch (err) {
-      setAlert({ type: 'error', text: `Verification failed: ${err.message}` })
+      setAlert({ type: 'error', text: `Assessment failed: ${err.message}` })
     } finally {
       setVerifying(false)
     }
@@ -194,26 +253,51 @@ export default function InvestorProfilePage() {
 
             {/* CV Section */}
             <div className="rounded-xl border border-amber-200 bg-amber-50/40 p-4 space-y-3">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <h3 className="font-bold text-amber-950 text-xs flex items-center gap-1.5">
-                  <span>📄 Curriculum Vitae (CV) & Accreditation Document</span>
+                  <span>Curriculum Vitae (stored under repo uploads/)</span>
                 </h3>
-                <button
-                  type="button"
-                  onClick={handleLoadSampleCv}
-                  className="rounded bg-white px-2.5 py-1 text-[11px] font-bold text-amber-900 border border-amber-300 hover:bg-amber-100 transition cursor-pointer"
-                >
-                  Load Sample Executive CV
-                </button>
+                <div className="flex gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => handleLoadSampleCv('elena')}
+                    className="rounded bg-white px-2.5 py-1 text-[11px] font-bold text-amber-900 border border-amber-300 hover:bg-amber-100 transition cursor-pointer"
+                  >
+                    Sample Elena CV
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleLoadSampleCv('vikram')}
+                    className="rounded bg-white px-2.5 py-1 text-[11px] font-bold text-amber-900 border border-amber-300 hover:bg-amber-100 transition cursor-pointer"
+                  >
+                    Sample Vikram CV
+                  </button>
+                </div>
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-800 mb-1">CV File Attachment Name</label>
+                <label className="block font-semibold text-slate-800 mb-1">Upload CV file (.txt / .pdf / .md)</label>
+                <input
+                  type="file"
+                  accept=".txt,.pdf,.md,.doc,.docx"
+                  onChange={handleCvFileChange}
+                  className="w-full text-xs text-slate-700 file:mr-3 file:rounded-lg file:border-0 file:bg-amber-700 file:px-3 file:py-1.5 file:text-xs file:font-bold file:text-white"
+                />
+                {cvFile && (
+                  <p className="mt-1 text-[11px] text-amber-900 font-semibold">Selected: {cvFile.name}</p>
+                )}
+                {storagePath && (
+                  <p className="mt-1 text-[11px] text-emerald-800 font-mono">Saved: uploads/{storagePath}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-800 mb-1">CV File Name</label>
                 <input
                   type="text"
                   value={form.cv_filename}
                   onChange={(e) => setForm({ ...form, cv_filename: e.target.value })}
-                  placeholder="e.g. EXECUTIVE_VENTURE_CV.pdf"
+                  placeholder="e.g. ELENA_ROSTOVA_CV.txt"
                   className="w-full rounded-lg border border-amber-300 px-3 py-2 text-xs font-mono text-slate-900 bg-white focus:ring-2 focus:ring-amber-500 focus:outline-none"
                 />
               </div>
@@ -231,14 +315,22 @@ export default function InvestorProfilePage() {
                 />
               </div>
 
-              <div className="pt-2 flex justify-end">
+              <div className="pt-2 flex flex-wrap justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={handleUploadCv}
+                  disabled={uploading}
+                  className="rounded-xl bg-white border border-amber-400 text-amber-950 px-4 py-2 text-xs font-bold transition cursor-pointer disabled:opacity-50"
+                >
+                  {uploading ? 'Saving to uploads/...' : 'Save CV to uploads/'}
+                </button>
                 <button
                   type="button"
                   onClick={handleRunVerification}
                   disabled={verifying}
                   className="rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white px-4 py-2 text-xs font-bold transition shadow-xs cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
                 >
-                  {verifying ? 'AI Verifying CV...' : '⚡ Run AI CV Verification'}
+                  {verifying ? 'Running AI Assessment...' : 'Run AI Background Assessment'}
                 </button>
               </div>
             </div>

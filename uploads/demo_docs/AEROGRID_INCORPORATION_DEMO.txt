@@ -1,0 +1,16 @@
+AEROGRID DYNAMICS PRIVATE LIMITED
+Certificate of Incorporation (DEMO)
+
+Corporate Identity Number (CIN): U72900KA2024PTC182001
+Company Name: AeroGrid Dynamics Private Limited
+Date of Incorporation: 14 March 2024
+Registered Office: Bengaluru, Karnataka, India
+Authorized Capital: INR 10,00,000
+Paid-up Capital: INR 1,00,000
+
+GSTIN (linked): 29AABCU9603R1ZM
+Industry: CleanTech / Climate Robotics
+Stage: Seed
+
+This document is a FundX local-testing fixture.
+It is NOT an official ROC/MCA certificate.

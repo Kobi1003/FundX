@@ -10,7 +10,7 @@ import uuid
 from typing import Any
 from datetime import datetime
 import httpx
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
 sys.path.insert(0, "/app")
@@ -18,6 +18,11 @@ sys.path.insert(0, "/app")
 from shared.neo4j_client import health_check as neo4j_health  # noqa: E402
 from shared.supabase_client import supabase_configured  # noqa: E402
 from shared import db  # noqa: E402
+from shared.local_storage import (  # noqa: E402
+    list_owner_files,
+    read_text_excerpt,
+    save_bytes,
+)
 
 logger = logging.getLogger("fundx.investor-service")
 
@@ -35,22 +40,23 @@ _INVESTORS: dict[str, dict[str, Any]] = {
         "firm": "Apex Horizon Capital",
         "bio": "Managing Partner at Apex Horizon Capital focusing on early-stage CleanTech, Climate Robotics, and AI Infrastructure. Former tech founder with 2 exits.",
         "thesis": "Backing visionary founders building deep-tech moats with resilient unit economics and sustainable recurring cash flows.",
-        "cv_filename": "ELENA_ROSTOVA_CV_2026.pdf",
+        "cv_filename": "ELENA_ROSTOVA_CV.txt",
+        "cv_storage_path": "demo_cvs/ELENA_ROSTOVA_CV.txt",
         "cv_text": "Managing Partner at Apex Horizon Capital. 10+ years venture experience. Seed investor in 22 startups with 4 unicorns. FINRA series 7 & 63 equivalent certified.",
         "is_verified": True,
-        "verification_status": "verified",
+        "verification_status": "ai_assessed",
         "verification_score": 92,
         "verification_report": {
-            "status": "verified",
+            "status": "ai_assessed",
             "is_verified": True,
             "score": 92,
-            "verified_badge": "AI Verified",
-            "badges": ["AI Verified Investor", "Accredited Syndicate Member", "Dealroom Authorized"],
-            "summary": "Investor credential verification for Elena Rostova (Apex Horizon Capital). Credibility rating: 92/100. Approved to submit offers and negotiate deals in Dealroom.",
+            "verified_badge": "AI Background Assessment",
+            "badges": ["AI Assessed Investor", "Dealroom Eligible (Demo)"],
+            "summary": "AI Background Assessment for Elena Rostova (Apex Horizon Capital). Credibility rating: 92/100. Not legal KYC — demo assessment only.",
             "checks": [
-                {"check": "Curriculum Vitae & Track Record", "status": "PASS", "detail": "Document 'ELENA_ROSTOVA_CV_2026.pdf' validated. 10+ years venture experience confirmed."},
-                {"check": "Accredited Investor Status", "status": "PASS", "detail": "Meets accredited investor net-worth and institutional GP standards."},
-                {"check": "Dealroom Negotiation Authorization", "status": "PASS", "detail": "Full authorization to submit term sheets and countersigned contracts."}
+                {"check": "CV Document Present", "status": "PASS", "detail": "Document 'ELENA_ROSTOVA_CV.txt' stored under uploads/demo_cvs/."},
+                {"check": "Self-Attested Experience Signals", "status": "PASS", "detail": "CV text indicates venture / syndicate experience (heuristic)."},
+                {"check": "Dealroom Eligibility (Demo)", "status": "PASS", "detail": "Assessment score meets demo threshold for offers."}
             ]
         },
         "created_at": "2026-06-10T12:00:00Z",
@@ -62,22 +68,23 @@ _INVESTORS: dict[str, dict[str, Any]] = {
         "firm": "Nexus Angel Syndicate",
         "bio": "Angel investor and syndicate lead with 35+ investments across B2B FinTech, SaaS, and Developer Tooling.",
         "thesis": "Writing $100k-$500k checks in capital-efficient software businesses with >75% gross margins and organic net revenue retention.",
-        "cv_filename": "VIKRAM_MEHTA_SYNDICATE_CV.pdf",
+        "cv_filename": "VIKRAM_MEHTA_CV.txt",
+        "cv_storage_path": "demo_cvs/VIKRAM_MEHTA_CV.txt",
         "cv_text": "Lead Syndicate Angel at Nexus. Prior VP Engineering at Razorpay. Active angel since 2018. Member of Indian Angel Network and AngelList.",
         "is_verified": True,
-        "verification_status": "verified",
+        "verification_status": "ai_assessed",
         "verification_score": 88,
         "verification_report": {
-            "status": "verified",
+            "status": "ai_assessed",
             "is_verified": True,
             "score": 88,
-            "verified_badge": "AI Verified",
-            "badges": ["AI Verified Investor", "Syndicate Lead"],
-            "summary": "Investor credential verification for Vikram Mehta (Nexus Angel Syndicate). Credibility rating: 88/100. Approved to negotiate deals.",
+            "verified_badge": "AI Background Assessment",
+            "badges": ["AI Assessed Investor", "Syndicate Lead (Demo)"],
+            "summary": "AI Background Assessment for Vikram Mehta (Nexus Angel Syndicate). Credibility rating: 88/100. Not legal KYC — demo assessment only.",
             "checks": [
-                {"check": "Curriculum Vitae & Experience", "status": "PASS", "detail": "Document parsed. Verified angel syndicate lead track record."},
-                {"check": "Accredited Investor Status", "status": "PASS", "detail": "High Net Worth Individual accreditation status active."},
-                {"check": "Dealroom Authorization", "status": "PASS", "detail": "Authorized for offer creation and term negotiations."}
+                {"check": "CV Document Present", "status": "PASS", "detail": "Document 'VIKRAM_MEHTA_CV.txt' stored under uploads/demo_cvs/."},
+                {"check": "Self-Attested Experience Signals", "status": "PASS", "detail": "CV text indicates angel / syndicate activity (heuristic)."},
+                {"check": "Dealroom Eligibility (Demo)", "status": "PASS", "detail": "Assessment score meets demo threshold for offers."}
             ]
         },
         "created_at": "2026-07-01T09:00:00Z",
@@ -101,11 +108,20 @@ _INVESTORS: dict[str, dict[str, Any]] = {
 
 _DOCUMENTS: dict[str, list[dict[str, Any]]] = {
     "investor-elena": [
-        {"id": "doc-e1", "filename": "ELENA_ROSTOVA_CV_2026.pdf", "doc_type": "cv", "storage_path": "docs/elena_cv.pdf"},
-        {"id": "doc-e2", "filename": "ACCREDITED_INVESTOR_CERT.pdf", "doc_type": "accreditation", "storage_path": "docs/elena_accred.pdf"},
+        {
+            "id": "doc-e1",
+            "filename": "ELENA_ROSTOVA_CV.txt",
+            "doc_type": "cv",
+            "storage_path": "demo_cvs/ELENA_ROSTOVA_CV.txt",
+        },
     ],
     "investor-vikram": [
-        {"id": "doc-v1", "filename": "VIKRAM_MEHTA_SYNDICATE_CV.pdf", "doc_type": "cv", "storage_path": "docs/vikram_cv.pdf"},
+        {
+            "id": "doc-v1",
+            "filename": "VIKRAM_MEHTA_CV.txt",
+            "doc_type": "cv",
+            "storage_path": "demo_cvs/VIKRAM_MEHTA_CV.txt",
+        },
     ],
     "investor-david": [],
 }
@@ -280,28 +296,121 @@ async def update_investor(investor_id: str, payload: InvestorUpdate) -> dict[str
 
 
 @app.post("/investors/{investor_id}/upload-cv")
-async def upload_cv(investor_id: str, payload: dict[str, Any]) -> dict[str, Any]:
-    filename = payload.get("filename") or "Investor_Executive_CV.pdf"
-    cv_text = payload.get("cv_text") or "Executive CV credentials uploaded."
+async def upload_cv(
+    investor_id: str,
+    file: UploadFile | None = File(None),
+    filename: str | None = Form(None),
+    cv_text: str | None = Form(None),
+) -> dict[str, Any]:
+    """
+    Store CV on local disk under uploads/investors/<id>/.
+
+    Accepts multipart file upload (preferred) or form fields for text-only demos.
+    JSON clients can still POST {"filename","cv_text"} via the JSON fallback route below.
+    """
+    # Support legacy JSON body when Content-Type is application/json
+    if file is None and filename is None and cv_text is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Provide a file upload or form fields filename/cv_text",
+        )
+
+    stored: dict[str, Any] | None = None
+    resolved_name = filename or (file.filename if file else None) or "Investor_CV.txt"
+    extracted = (cv_text or "").strip()
+
+    if file is not None:
+        content = await file.read()
+        try:
+            stored = save_bytes(
+                category="investors",
+                owner_id=investor_id,
+                filename=file.filename or resolved_name,
+                content=content,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        resolved_name = stored["filename"]
+        if not extracted:
+            extracted = read_text_excerpt(stored["storage_path"]) or (
+                f"CV file stored at {stored['storage_path']} ({stored['size_bytes']} bytes)."
+            )
+
+    storage_path = stored["storage_path"] if stored else None
 
     await db.execute(
         "UPDATE public.investors SET cv_filename = $2, cv_text = $3, updated_at = NOW() WHERE id = $1",
-        investor_id, filename, cv_text
+        investor_id,
+        resolved_name,
+        extracted or "CV uploaded.",
     )
 
     if investor_id in _INVESTORS:
-        _INVESTORS[investor_id]["cv_filename"] = filename
-        _INVESTORS[investor_id]["cv_text"] = cv_text
+        _INVESTORS[investor_id]["cv_filename"] = resolved_name
+        _INVESTORS[investor_id]["cv_text"] = extracted
+        _INVESTORS[investor_id]["cv_storage_path"] = storage_path
 
     docs = _DOCUMENTS.setdefault(investor_id, [])
-    docs.append({
-        "id": str(uuid.uuid4()),
-        "filename": filename,
-        "doc_type": "cv",
-        "storage_path": f"docs/{filename}",
-    })
+    docs.append(
+        {
+            "id": str(uuid.uuid4()),
+            "filename": resolved_name,
+            "doc_type": "cv",
+            "storage_path": storage_path or f"investors/{investor_id}/{resolved_name}",
+        }
+    )
 
-    return {"message": "CV uploaded successfully", "cv_filename": filename}
+    return {
+        "message": "CV uploaded successfully",
+        "cv_filename": resolved_name,
+        "cv_text_excerpt": (extracted or "")[:500],
+        "storage_path": storage_path,
+        "stored_on_disk": stored is not None,
+    }
+
+
+@app.post("/investors/{investor_id}/upload-cv-json")
+async def upload_cv_json(investor_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """JSON fallback: paste filename + text without multipart."""
+    filename = payload.get("filename") or "Investor_Executive_CV.txt"
+    cv_text = payload.get("cv_text") or "Executive CV credentials uploaded."
+    content = cv_text.encode("utf-8")
+    try:
+        stored = save_bytes(
+            category="investors",
+            owner_id=investor_id,
+            filename=filename if filename.lower().endswith((".txt", ".md")) else f"{filename}.txt",
+            content=content,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    await db.execute(
+        "UPDATE public.investors SET cv_filename = $2, cv_text = $3, updated_at = NOW() WHERE id = $1",
+        investor_id,
+        stored["filename"],
+        cv_text,
+    )
+    if investor_id in _INVESTORS:
+        _INVESTORS[investor_id]["cv_filename"] = stored["filename"]
+        _INVESTORS[investor_id]["cv_text"] = cv_text
+        _INVESTORS[investor_id]["cv_storage_path"] = stored["storage_path"]
+
+    docs = _DOCUMENTS.setdefault(investor_id, [])
+    docs.append(
+        {
+            "id": str(uuid.uuid4()),
+            "filename": stored["filename"],
+            "doc_type": "cv",
+            "storage_path": stored["storage_path"],
+        }
+    )
+    return {
+        "message": "CV text saved to local uploads/",
+        "cv_filename": stored["filename"],
+        "storage_path": stored["storage_path"],
+        "stored_on_disk": True,
+    }
 
 
 @app.post("/investors/{investor_id}/verify")
@@ -319,11 +428,25 @@ async def verify_investor(investor_id: str) -> dict[str, Any]:
         "bio": inv.get("bio"),
         "cv_filename": inv.get("cv_filename"),
         "cv_text": inv.get("cv_text"),
+        "cv_storage_path": inv.get("cv_storage_path"),
     }
+
+    # Enrich from on-disk CV if text is thin
+    disk_files = list_owner_files("investors", investor_id)
+    if disk_files and (not verify_payload.get("cv_text") or len(str(verify_payload.get("cv_text"))) < 40):
+        excerpt = read_text_excerpt(disk_files[-1]["storage_path"])
+        if excerpt:
+            verify_payload["cv_text"] = excerpt
+            verify_payload["cv_storage_path"] = disk_files[-1]["storage_path"]
+            verify_payload["cv_filename"] = verify_payload.get("cv_filename") or disk_files[-1]["filename"]
+    elif inv.get("cv_storage_path"):
+        excerpt = read_text_excerpt(inv["cv_storage_path"])
+        if excerpt and (not verify_payload.get("cv_text") or len(str(verify_payload.get("cv_text"))) < 40):
+            verify_payload["cv_text"] = excerpt
 
     report = None
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.post(f"{AI_SERVICE_URL}/ai/verify/investor", json=verify_payload)
             if resp.status_code == 200:
                 report = resp.json()
@@ -331,26 +454,41 @@ async def verify_investor(investor_id: str) -> dict[str, Any]:
         pass
 
     if not report:
-        has_cv = bool(inv.get("cv_filename") or inv.get("cv_text"))
+        has_cv = bool(inv.get("cv_filename") or inv.get("cv_text") or disk_files)
         score = 90 if has_cv else 45
         is_ver = score >= 70
         report = {
-            "status": "verified" if is_ver else "unverified",
+            "status": "ai_assessed" if is_ver else "incomplete",
             "is_verified": is_ver,
             "score": score,
-            "verified_badge": "AI Verified" if is_ver else "Verification Required",
-            "badges": ["AI Verified Investor", "Dealroom Authorized"] if is_ver else [],
-            "summary": f"Investor verification for {inv.get('display_name')}. Credibility score: {score}/100.",
+            "verified_badge": "AI Background Assessment" if is_ver else "Assessment Required",
+            "badges": ["AI Assessed Investor", "Dealroom Eligible (Demo)"] if is_ver else [],
+            "summary": (
+                f"AI Background Assessment for {inv.get('display_name')}. "
+                f"Credibility score: {score}/100. Not legal KYC."
+            ),
             "checks": [
-                {"check": "Curriculum Vitae & Experience", "status": "PASS" if has_cv else "MISSING", "detail": f"CV: {inv.get('cv_filename') or 'Pending'}"},
-                {"check": "Accreditation Status", "status": "PASS" if has_cv else "PENDING", "detail": "Investor status confirmed"},
-                {"check": "Dealroom Authorization", "status": "PASS" if has_cv else "GATED", "detail": "Negotiation clearance status"},
+                {
+                    "check": "CV Document Present",
+                    "status": "PASS" if has_cv else "MISSING",
+                    "detail": f"CV: {inv.get('cv_filename') or 'Pending upload'}",
+                },
+                {
+                    "check": "Self-Attested Experience Signals",
+                    "status": "PASS" if has_cv else "PENDING",
+                    "detail": "Heuristic parse of CV text only — not a legal accreditation check.",
+                },
+                {
+                    "check": "Dealroom Eligibility (Demo)",
+                    "status": "PASS" if has_cv else "GATED",
+                    "detail": "Demo gate based on assessment score.",
+                },
             ],
             "timestamp": datetime.utcnow().isoformat() + "Z",
         }
 
     is_verified = report.get("is_verified", False)
-    v_status = "verified" if is_verified else "unverified"
+    v_status = "ai_assessed" if is_verified else "incomplete"
     v_score = report.get("score", 50)
 
     # Persist in PostgreSQL

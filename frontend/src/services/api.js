@@ -1,12 +1,17 @@
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
 async function request(path, options = {}) {
+  const headers = {
+    ...(options.headers || {}),
+  }
+  // Don't force JSON content-type for FormData
+  if (!(options.body instanceof FormData)) {
+    headers['Content-Type'] = headers['Content-Type'] || 'application/json'
+  }
+
   const res = await fetch(`${API_BASE}${path}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(options.headers || {}),
-    },
     ...options,
+    headers,
   })
   if (!res.ok) {
     let errorMsg = `Request failed: ${res.status}`
@@ -51,6 +56,12 @@ export const api = {
   verifyStartup: (id) =>
     request(`/api/startups/${id}/verify`, { method: 'POST' }),
   listStartupDocs: (id) => request(`/api/startups/${id}/documents`),
+  uploadStartupDocument: (id, file, docType = 'general') => {
+    const fd = new FormData()
+    fd.append('file', file)
+    fd.append('doc_type', docType)
+    return request(`/api/startups/${id}/upload-document`, { method: 'POST', body: fd })
+  },
 
   // Investors
   listInvestors: () => request('/api/investors'),
@@ -59,8 +70,15 @@ export const api = {
     request('/api/investors', { method: 'POST', body: JSON.stringify(body) }),
   updateInvestor: (id, body) =>
     request(`/api/investors/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
-  uploadInvestorCv: (id, body) =>
-    request(`/api/investors/${id}/upload-cv`, { method: 'POST', body: JSON.stringify(body) }),
+  uploadInvestorCv: (id, { file, filename, cv_text } = {}) => {
+    const fd = new FormData()
+    if (file) fd.append('file', file)
+    if (filename) fd.append('filename', filename)
+    if (cv_text) fd.append('cv_text', cv_text)
+    return request(`/api/investors/${id}/upload-cv`, { method: 'POST', body: fd })
+  },
+  uploadInvestorCvJson: (id, body) =>
+    request(`/api/investors/${id}/upload-cv-json`, { method: 'POST', body: JSON.stringify(body) }),
   verifyInvestor: (id) =>
     request(`/api/investors/${id}/verify`, { method: 'POST' }),
   getInvestorPreferences: (id) => request(`/api/investors/${id}/preferences`),
@@ -97,6 +115,10 @@ export const api = {
     request('/api/ai/analyze-thesis', { method: 'POST', body: JSON.stringify(body) }),
   runStartupAnalysis: (body) =>
     request('/api/ai/startup-analysis', { method: 'POST', body: JSON.stringify(body) }),
+  runInvestorAnalysis: (body) =>
+    request('/api/ai/investor-analysis', { method: 'POST', body: JSON.stringify(body) }),
+  runNegotiation: (body) =>
+    request('/api/ai/negotiation', { method: 'POST', body: JSON.stringify(body) }),
   simulate: (body) =>
     request('/api/ai/simulate', { method: 'POST', body: JSON.stringify(body) }),
   demoSample: () => request('/api/ai/demo/sample'),
