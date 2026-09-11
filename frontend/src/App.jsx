@@ -1,19 +1,36 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import AppLayout from './components/AppLayout'
-import { AuthProvider } from './context/AuthContext'
+import { AuthProvider, useAuthContext } from './context/AuthContext'
 import HomePage from './pages/HomePage'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
-import DashboardPage from './pages/DashboardPage'
-import StartupsPage from './pages/StartupsPage'
-import NewStartupPage from './pages/NewStartupPage'
-import StartupDetailPage from './pages/StartupDetailPage'
-import StartupAnalysisPage from './pages/StartupAnalysisPage'
-import InvestorsPage from './pages/InvestorsPage'
-import InvestorDetailPage from './pages/InvestorDetailPage'
-import DealsPage from './pages/DealsPage'
-import DealDetailPage from './pages/DealDetailPage'
-import DealRoomPage from './pages/DealRoomPage'
+
+// Super Admin Portal Pages
+import AdminDashboardPage from './pages/admin/AdminDashboardPage'
+import AdminStartupsPage from './pages/admin/AdminStartupsPage'
+import AdminInvestorsPage from './pages/admin/AdminInvestorsPage'
+import AdminMarketplacePage from './pages/admin/AdminMarketplacePage'
+import AdminEditCompanyPage from './pages/admin/AdminEditCompanyPage'
+
+// Startup Portal Pages
+import StartupDashboardPage from './pages/startup/StartupDashboardPage'
+import StartupDealroomPage from './pages/startup/StartupDealroomPage'
+import StartupVerifierPage from './pages/startup/StartupVerifierPage'
+import StartupCreateDealPage from './pages/startup/StartupCreateDealPage'
+
+// Investor Portal Pages
+import InvestorDashboardPage from './pages/investor/InvestorDashboardPage'
+import InvestorListedDealsPage from './pages/investor/InvestorListedDealsPage'
+import InvestorDealroomPage from './pages/investor/InvestorDealroomPage'
+import InvestorProfilePage from './pages/investor/InvestorProfilePage'
+
+function DashboardRedirect() {
+  const { user } = useAuthContext()
+  if (!user) return <Navigate to="/login" replace />
+  if (user.role === 'admin') return <Navigate to="/admin/dashboard" replace />
+  if (user.role === 'startup') return <Navigate to="/startup/dashboard" replace />
+  return <Navigate to="/investor/dashboard" replace />
+}
 
 export default function App() {
   return (
@@ -21,21 +38,41 @@ export default function App() {
       <BrowserRouter>
         <Routes>
           <Route element={<AppLayout />}>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/register" element={<RegisterPage />} />
-          <Route path="/dashboard" element={<DashboardPage />} />
-          <Route path="/startups" element={<StartupsPage />} />
-          <Route path="/startups/new" element={<NewStartupPage />} />
-          <Route path="/startups/:id" element={<StartupDetailPage />} />
-          <Route path="/startups/:id/analysis" element={<StartupAnalysisPage />} />
-          <Route path="/investors" element={<InvestorsPage />} />
-          <Route path="/investors/:id" element={<InvestorDetailPage />} />
-          <Route path="/deals" element={<DealsPage />} />
-          <Route path="/deals/:id" element={<DealDetailPage />} />
-          <Route path="/deal-room/:id" element={<DealRoomPage />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Route>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/register" element={<RegisterPage />} />
+            <Route path="/dashboard" element={<DashboardRedirect />} />
+
+            {/* Super Admin Portal */}
+            <Route path="/admin" element={<AdminDashboardPage />} />
+            <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
+            <Route path="/admin/startups" element={<AdminStartupsPage />} />
+            <Route path="/admin/investors" element={<AdminInvestorsPage />} />
+            <Route path="/admin/marketplace" element={<AdminMarketplacePage />} />
+            <Route path="/admin/company-edit" element={<AdminEditCompanyPage />} />
+
+            {/* Startup Portal */}
+            <Route path="/startup" element={<StartupDashboardPage />} />
+            <Route path="/startup/dashboard" element={<StartupDashboardPage />} />
+            <Route path="/startup/dealroom" element={<StartupDealroomPage />} />
+            <Route path="/startup/verifier" element={<StartupVerifierPage />} />
+            <Route path="/startup/deals/create" element={<StartupCreateDealPage />} />
+
+            {/* Investor Portal */}
+            <Route path="/investor" element={<InvestorDashboardPage />} />
+            <Route path="/investor/dashboard" element={<InvestorDashboardPage />} />
+            <Route path="/investor/deals" element={<InvestorListedDealsPage />} />
+            <Route path="/investor/dealroom" element={<InvestorDealroomPage />} />
+            <Route path="/investor/profile" element={<InvestorProfilePage />} />
+
+            {/* Legacy Fallbacks */}
+            <Route path="/startups" element={<AdminStartupsPage />} />
+            <Route path="/investors" element={<AdminInvestorsPage />} />
+            <Route path="/deals" element={<InvestorListedDealsPage />} />
+            <Route path="/deal-room/:id" element={<InvestorDealroomPage />} />
+
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Route>
         </Routes>
       </BrowserRouter>
     </AuthProvider>
