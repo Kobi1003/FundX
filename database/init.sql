@@ -178,6 +178,7 @@ INSERT INTO public.profiles (id, email, password_hash, full_name, role, startup_
   ('founder-aerogrid', 'founder@aerogrid.io', 'password123', 'Priya Sharma', 'startup', 'startup-aerogrid', NULL, TRUE),
   ('founder-finpulse', 'contact@finpulse.ai', 'password123', 'Arjun Nambiar', 'startup', 'startup-finpulse', NULL, TRUE),
   ('founder-biosynthetix', 'team@biosynthetix.io', 'password123', 'Dr. Sarah Chen', 'startup', 'startup-biosynthetix', NULL, FALSE),
+  ('founder-quantumledger', 'alex@quantumledger.ai', 'password123', 'Alex Mercer', 'startup', 'startup-quantumledger', NULL, TRUE),
   ('investor-elena', 'elena@apexhorizon.com', 'password123', 'Elena Rostova', 'investor', NULL, 'investor-elena', TRUE),
   ('investor-vikram', 'vikram@nexusangels.io', 'password123', 'Vikram Mehta', 'investor', NULL, 'investor-vikram', TRUE),
   ('investor-david', 'david.miller@angelinvest.org', 'password123', 'David Miller', 'investor', NULL, 'investor-david', FALSE)
@@ -216,7 +217,17 @@ INSERT INTO public.startups (id, owner_id, name, slug, tagline, description, ind
    'HealthTech', 'Pre-Seed', 'https://biosynthetix.io', 'team@biosynthetix.io',
    'Targeted biologic therapies require massive trial-and-error in wet labs. BioSynthetix uses diffusion models trained on cryo-EM datasets to slash discovery timelines by 60%.',
    '33AAECB9988P1Z5', 'BIOSYNTHETIX_PROVISIONAL_INC.pdf',
-   FALSE, 'pending', 62, NULL)
+   FALSE, 'pending', 62, NULL),
+
+  ('startup-quantumledger', 'founder-quantumledger',
+   'QuantumLedger AI', 'quantumledger-ai',
+   'Post-quantum cryptographic audit engine for real-world asset tokenization',
+   'Zero-knowledge verification rails for institutional asset management and DeFi compliance.',
+   'AI / DeepTech', 'Seed', 'https://quantumledger.ai', 'alex@quantumledger.ai',
+   'Quantum computing threatens traditional RSA public-key infrastructure. QuantumLedger provides lattice-based cryptography for asset custody.',
+   '19AAACQ4321R1Z9', 'QUANTUMLEDGER_INC_ROC_2025.pdf',
+   TRUE, 'verified', 96,
+   '{"status": "verified", "score": 96, "risk_level": "LOW", "verified_badge": "AI Verified", "summary": "AI Background check completed for QuantumLedger AI. Confidence score: 96/100."}'::jsonb)
 ON CONFLICT (id) DO NOTHING;
 
 -- Seed Startup Documents
@@ -292,6 +303,16 @@ INSERT INTO public.deals (id, startup_id, startup_name, startup_verified, title,
    'Wet-lab therapeutic discovery cycles take 2+ years. BioSynthetix uses generative chemistry to slash synthesis cycles to 6 weeks.',
    'BioSynthetix_Thesis_Draft_v1.pdf', 79,
    '{"feasibility_score": 79, "score_grade": "B+", "summary": "AI Feasibility Score: 79/100."}'::jsonb,
+   NULL),
+
+  ('deal-quantumledger', 'startup-quantumledger', 'QuantumLedger AI', TRUE,
+   'Post-Quantum Cryptographic Audit Engine & Tokenization Protocol',
+   'Lattice-based zero-knowledge auditing rails for institutional asset management',
+   'AI / DeepTech', 'Seed', 1200000, 9.0, 2.0, '2.0% quarterly revenue until 2.2x return cap',
+   'active',
+   'Lattice cryptography protects multi-trillion dollar asset tokenization protocols against quantum decryption risks.',
+   'QuantumLedger_SeriesSeed_Thesis.pdf', 95,
+   '{"feasibility_score": 95, "score_grade": "A+", "summary": "AI Feasibility Score: 95/100. Top tier cryptographic security moat."}'::jsonb,
    NULL)
 ON CONFLICT (id) DO NOTHING;
 

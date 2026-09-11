@@ -37,7 +37,7 @@ export default function InvestorListedDealsPage() {
       setShowGatingModal(true)
       return
     }
-    navigate('/investor/dealroom')
+    navigate(`/investor/dealroom?dealId=${deal.id}`)
   }
 
   const handleExpressInterest = async (dealId) => {
