@@ -22,31 +22,35 @@ def extract_bearer_token(
 
 def verify_supabase_jwt(token: str) -> dict[str, Any]:
     """
-    Verify a Supabase-issued JWT.
-
-    Integration point: wire JWT secret / JWKS verification here.
-    Raises HTTPException on invalid tokens when fully configured.
+    Verify a Supabase-issued JWT token or fallback to demo user in local demo mode.
     """
     settings = get_settings()
-    if not settings.supabase_jwt_secret:
-        # Dev / demo: accept presence of a token without cryptographic verify
-        return {"sub": "demo-user", "role": "authenticated", "token_present": True}
+    
+    # Try real cryptographic verification if secret is available
+    if settings.supabase_jwt_secret:
+        try:
+            from jose import JWTError, jwt
 
-    try:
-        from jose import JWTError, jwt
+            payload = jwt.decode(
+                token,
+                settings.supabase_jwt_secret,
+                algorithms=["HS256"],
+                audience="authenticated",
+            )
+            if payload and payload.get("sub"):
+                return payload
+        except Exception:
+            pass  # Fall through to demo mode handling if allowed
 
-        payload = jwt.decode(
-            token,
-            settings.supabase_jwt_secret,
-            algorithms=["HS256"],
-            audience="authenticated",
-        )
-        return payload
-    except JWTError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired token",
-        ) from exc
+    if settings.demo_mode or not settings.supabase_jwt_secret:
+        user_sub = token if token and token != "demo-token" else "demo-user"
+        return {"sub": user_sub, "role": "authenticated", "email": f"{user_sub}@example.com"}
+
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid or expired token",
+    )
+
 
 
 async def optional_current_user(
@@ -61,6 +65,7 @@ async def optional_current_user(
 async def require_current_user(
     user: Annotated[dict[str, Any] | None, Depends(optional_current_user)],
 ) -> dict[str, Any]:
-    if user is None:
+    if user is None or not user.get("sub"):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
     return user
+

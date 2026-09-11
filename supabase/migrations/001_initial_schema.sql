@@ -44,6 +44,8 @@ create table if not exists public.startups (
   description text,
   industry text,
   stage text,
+  funding_requirement numeric,
+  business_model text,
   website text,
   thesis text,
   created_at timestamptz not null default now(),
@@ -117,11 +119,12 @@ create table if not exists public.investors (
 
 create table if not exists public.investment_preferences (
   id uuid primary key default gen_random_uuid(),
-  investor_id uuid not null references public.investors (id) on delete cascade,
+  investor_id uuid not null unique references public.investors (id) on delete cascade,
   industries text[] default '{}',
   stages text[] default '{}',
   check_size_min numeric,
   check_size_max numeric,
+  risk_appetite text,
   geographies text[] default '{}',
   notes text,
   created_at timestamptz not null default now(),
@@ -194,3 +197,96 @@ create table if not exists public.negotiations (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+-- ---------------------------------------------------------------------------
+-- Row Level Security (RLS) & Ownership Policies
+-- ---------------------------------------------------------------------------
+
+-- 1. profiles
+alter table public.profiles enable row level security;
+
+create policy "Users can view own profile"
+  on public.profiles for select
+  using (auth.uid() = id);
+
+create policy "Users can insert own profile"
+  on public.profiles for insert
+  with check (auth.uid() = id);
+
+create policy "Users can update own profile"
+  on public.profiles for update
+  using (auth.uid() = id)
+  with check (auth.uid() = id);
+
+-- 2. startups
+alter table public.startups enable row level security;
+
+create policy "Startup owners can view own startup"
+  on public.startups for select
+  using (auth.uid() = owner_id);
+
+create policy "Startup owners can create startup"
+  on public.startups for insert
+  with check (auth.uid() = owner_id);
+
+create policy "Startup owners can update own startup"
+  on public.startups for update
+  using (auth.uid() = owner_id)
+  with check (auth.uid() = owner_id);
+
+-- 3. investors
+alter table public.investors enable row level security;
+
+create policy "Investor owners can view own investor profile"
+  on public.investors for select
+  using (auth.uid() = owner_id);
+
+create policy "Investor owners can create investor profile"
+  on public.investors for insert
+  with check (auth.uid() = owner_id);
+
+create policy "Investor owners can update own investor profile"
+  on public.investors for update
+  using (auth.uid() = owner_id)
+  with check (auth.uid() = owner_id);
+
+-- 4. investment_preferences
+alter table public.investment_preferences enable row level security;
+
+create policy "Investor owners can view own investment preferences"
+  on public.investment_preferences for select
+  using (
+    exists (
+      select 1 from public.investors
+      where investors.id = investment_preferences.investor_id
+      and investors.owner_id = auth.uid()
+    )
+  );
+
+create policy "Investor owners can insert own investment preferences"
+  on public.investment_preferences for insert
+  with check (
+    exists (
+      select 1 from public.investors
+      where investors.id = investment_preferences.investor_id
+      and investors.owner_id = auth.uid()
+    )
+  );
+
+create policy "Investor owners can update own investment preferences"
+  on public.investment_preferences for update
+  using (
+    exists (
+      select 1 from public.investors
+      where investors.id = investment_preferences.investor_id
+      and investors.owner_id = auth.uid()
+    )
+  )
+  with check (
+    exists (
+      select 1 from public.investors
+      where investors.id = investment_preferences.investor_id
+      and investors.owner_id = auth.uid()
+    )
+  );
+
