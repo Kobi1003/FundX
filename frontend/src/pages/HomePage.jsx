@@ -1,25 +1,28 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuthContext } from '../context/AuthContext'
+import VerificationBadge from '../components/VerificationBadge'
+import { Handshake, Rocket, Users, ShieldCheck, ArrowRight, Sparkles, Briefcase } from 'lucide-react'
 
 export default function HomePage() {
   const navigate = useNavigate()
   const { user } = useAuthContext()
 
-  const handlePortalEntry = (targetRole, path) => {
-    if (user?.role === targetRole) {
-      navigate(path)
-    } else {
+  const handlePortalEntry = (targetRole, targetPath) => {
+    if (!user) {
       navigate('/login')
+      return
     }
+    navigate(targetPath)
   }
 
   return (
-    <div className="space-y-12 py-6">
-      {/* Hero Section */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#09221a] via-[#0f3d2e] to-[#154e3b] px-6 py-16 sm:px-12 sm:py-20 text-white shadow-2xl border border-emerald-900/60">
+    <div className="space-y-12">
+      {/* Hero Banner */}
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 via-[#0a231b] to-slate-950 p-8 sm:p-12 text-white shadow-2xl border border-emerald-900/50">
         <div className="relative z-10 max-w-3xl space-y-6">
           <div className="inline-flex items-center gap-2 rounded-full bg-amber-400/20 px-4 py-1 text-xs font-bold text-amber-300 border border-amber-400/30">
-            <span>✨ Autonomous Multi-Agent Investment Platform</span>
+            <Sparkles className="h-3.5 w-3.5 text-amber-300" />
+            <span>Autonomous Multi-Agent Investment Platform</span>
           </div>
 
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black tracking-tight leading-[1.1]">
@@ -65,8 +68,8 @@ export default function HomePage() {
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs hover:border-amber-400 hover:shadow-md transition flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between mb-4">
-                <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-100 text-2xl">
-                  👑
+                <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-100 font-black">
+                  <ShieldCheck className="h-6 w-6 text-amber-900" />
                 </span>
                 <span className="rounded-full bg-amber-50 text-amber-900 text-[10px] font-bold px-2.5 py-0.5 border border-amber-200">
                   Platform Oversight
@@ -106,8 +109,8 @@ export default function HomePage() {
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs hover:border-emerald-400 hover:shadow-md transition flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between mb-4">
-                <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-100 text-2xl">
-                  🚀
+                <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-100 font-black">
+                  <Rocket className="h-6 w-6 text-emerald-900" />
                 </span>
                 <span className="rounded-full bg-emerald-50 text-emerald-900 text-[10px] font-bold px-2.5 py-0.5 border border-emerald-200">
                   Founder Hub
@@ -147,8 +150,8 @@ export default function HomePage() {
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs hover:border-cyan-400 hover:shadow-md transition flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between mb-4">
-                <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-100 text-2xl">
-                  💼
+                <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-100 font-black">
+                  <Briefcase className="h-6 w-6 text-cyan-900" />
                 </span>
                 <span className="rounded-full bg-cyan-50 text-cyan-900 text-[10px] font-bold px-2.5 py-0.5 border border-cyan-200">
                   Angel / VC Syndicate

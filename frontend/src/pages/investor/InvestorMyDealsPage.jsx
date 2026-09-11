@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuthContext } from '../../context/AuthContext'
 import api from '../../services/api'
 import VerificationBadge from '../../components/VerificationBadge'
-import { Handshake, Building2, Sparkles, Search, Filter } from 'lucide-react'
+import { Handshake, Building2, Sparkles, Search, Filter, Zap, Circle, CheckCircle2 } from 'lucide-react'
 
 const recentDealsFromOtherInvestors = [
   {
@@ -154,9 +154,9 @@ export default function InvestorMyDealsPage() {
             className="rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
           >
             <option value="all">All Round Statuses</option>
-            <option value="negotiating">⚡ In Negotiation</option>
-            <option value="open">🟢 Open Marketplace Round</option>
-            <option value="closed">💜 Closed Deals</option>
+            <option value="negotiating">In Negotiation</option>
+            <option value="open">Open Marketplace Round</option>
+            <option value="closed">Closed Deals</option>
           </select>
         </div>
       </div>
@@ -188,7 +188,7 @@ export default function InvestorMyDealsPage() {
                       {deal.funding_stage || 'Seed'} • {deal.industry}
                     </span>
                     <span
-                      className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold border ${
+                      className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold border flex items-center gap-1 ${
                         isClosed
                           ? 'bg-purple-50 text-purple-900 border-purple-300'
                           : isNegotiating
@@ -196,7 +196,22 @@ export default function InvestorMyDealsPage() {
                           : 'bg-emerald-50 text-emerald-900 border-emerald-300'
                       }`}
                     >
-                      {isClosed ? '💜 Closed' : isNegotiating ? '⚡ In Negotiation' : '🟢 Open Round'}
+                      {isClosed ? (
+                        <>
+                          <CheckCircle2 className="h-3 w-3 text-purple-700" />
+                          <span>Closed</span>
+                        </>
+                      ) : isNegotiating ? (
+                        <>
+                          <Zap className="h-3 w-3 text-amber-600" />
+                          <span>In Negotiation</span>
+                        </>
+                      ) : (
+                        <>
+                          <Circle className="h-2 w-2 fill-emerald-600 text-emerald-600" />
+                          <span>Open Round</span>
+                        </>
+                      )}
                     </span>
                   </div>
 

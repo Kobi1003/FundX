@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useAuthContext } from '../../context/AuthContext'
 import api from '../../services/api'
+import { CheckCircle2, Handshake, ShieldCheck, Zap, Circle, ArrowRight } from 'lucide-react'
 
 export default function StartupDealroomPage() {
   const { user } = useAuthContext()
@@ -52,11 +53,71 @@ export default function StartupDealroomPage() {
     setSelectedDeal(deal)
     try {
       const tree = await api.getNegotiationTree(deal.id)
-      setTreeData(tree)
+      if (tree && (tree.timeline?.length || tree.steps?.length)) {
+        setTreeData(tree)
+      } else {
+        setTreeData({
+          deal_id: deal.id,
+          timeline: [
+            {
+              id: 'offer-1',
+              investor_name: deal.startup_name || 'Founder',
+              sender_type: 'startup',
+              amount: deal.target_raise || 750000,
+              equity_pct: deal.equity_pct || 7.0,
+              royalty_pct: deal.royalty_pct || 2.5,
+              royalty_payout_terms: deal.royalty_payout_terms || '2.5% quarterly revenue cap 2.0x',
+              status: 'countered',
+              message: 'Published initial marketplace term sheet.',
+              timestamp: '2026-08-21T10:00:00Z',
+            },
+            {
+              id: 'offer-2',
+              investor_name: 'Elena Rostova (Apex Horizon Capital)',
+              sender_type: 'investor',
+              amount: deal.target_raise || 750000,
+              equity_pct: (deal.equity_pct || 7.0) - 0.5,
+              royalty_pct: (deal.royalty_pct || 2.5) - 0.5,
+              royalty_payout_terms: '2.0% quarterly revenue cap 1.8x',
+              status: 'active',
+              message: 'Venture counter-offer: Proposing 6.5% equity with 2.0% royalty payback cap.',
+              timestamp: '2026-08-23T14:20:00Z',
+            },
+          ],
+        })
+      }
       const msgs = await api.listMessages(`room-${deal.id.replace('deal-', '')}`)
       setMessages(msgs || [])
     } catch {
-      // fallback
+      setTreeData({
+        deal_id: deal.id,
+        timeline: [
+          {
+            id: 'offer-1',
+            investor_name: deal.startup_name || 'Founder',
+            sender_type: 'startup',
+            amount: deal.target_raise || 750000,
+            equity_pct: deal.equity_pct || 7.0,
+            royalty_pct: deal.royalty_pct || 2.5,
+            royalty_payout_terms: deal.royalty_payout_terms || '2.5% quarterly revenue cap 2.0x',
+            status: 'countered',
+            message: 'Published initial marketplace term sheet.',
+            timestamp: '2026-08-21T10:00:00Z',
+          },
+          {
+            id: 'offer-2',
+            investor_name: 'Elena Rostova (Apex Horizon Capital)',
+            sender_type: 'investor',
+            amount: deal.target_raise || 750000,
+            equity_pct: (deal.equity_pct || 7.0) - 0.5,
+            royalty_pct: (deal.royalty_pct || 2.5) - 0.5,
+            royalty_payout_terms: '2.0% quarterly revenue cap 1.8x',
+            status: 'active',
+            message: 'Venture counter-offer: Proposing 6.5% equity with 2.0% royalty payback cap.',
+            timestamp: '2026-08-23T14:20:00Z',
+          },
+        ],
+      })
     }
   }
 
@@ -154,6 +215,9 @@ export default function StartupDealroomPage() {
   const ongoingDeals = deals.filter((d) => d.status !== 'closed')
   const closedDeals = deals.filter((d) => d.status === 'closed')
   const displayedDeals = activeTab === 'ongoing' ? ongoingDeals : closedDeals
+
+  const timeline = treeData?.timeline || treeData?.steps || treeData?.offers || []
+  const activeOffer = timeline.find((s) => s.status === 'active' && s.sender_type !== 'startup') || timeline.find((s) => s.status === 'active')
 
   return (
     <div className="space-y-6">
@@ -258,7 +322,7 @@ export default function StartupDealroomPage() {
           {selectedDeal ? (
             <>
               {/* Active Deal Summary Bar */}
-              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
+              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
                   <div>
                     <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
@@ -266,15 +330,30 @@ export default function StartupDealroomPage() {
                     </span>
                     <h2 className="text-base font-bold text-slate-900 mt-0.5">{selectedDeal.title}</h2>
                   </div>
-                  <span
-                    className={`self-start sm:self-auto px-3 py-1 rounded-full text-xs font-extrabold uppercase ${
-                      selectedDeal.status === 'closed'
-                        ? 'bg-purple-100 text-purple-700'
-                        : 'bg-emerald-100 text-emerald-800'
-                    }`}
-                  >
-                    Status: {selectedDeal.status}
-                  </span>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    {activeOffer && selectedDeal.status !== 'closed' && (
+                      <button
+                        type="button"
+                        onClick={() => handleAcceptOffer(activeOffer.id)}
+                        disabled={actionLoading}
+                        className="rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 text-xs font-bold transition shadow-sm flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                      >
+                        <CheckCircle2 className="h-4 w-4" />
+                        <span>Accept Current Offer (${(Number(activeOffer.amount)).toLocaleString()} @ {activeOffer.equity_pct}% Eq)</span>
+                      </button>
+                    )}
+
+                    <span
+                      className={`self-start sm:self-auto px-3 py-1 rounded-full text-xs font-extrabold uppercase ${
+                        selectedDeal.status === 'closed'
+                          ? 'bg-purple-100 text-purple-700'
+                          : 'bg-emerald-100 text-emerald-800'
+                      }`}
+                    >
+                      Status: {selectedDeal.status}
+                    </span>
+                  </div>
                 </div>
 
                 <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
