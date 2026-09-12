@@ -1,27 +1,42 @@
-import { Outlet } from 'react-router-dom'
+import { Outlet, useLocation } from 'react-router-dom'
 import PortalHeader from './PortalHeader'
 import Sidebar from './Sidebar'
 
 export default function AppLayout() {
+  const { pathname } = useLocation()
+  const isSimulator = pathname === '/simulation' || pathname.endsWith('/simulator')
+
   return (
-    <div className="min-h-screen flex flex-col bg-[#f7f9f8]">
-      {/* Top Header Bar */}
+    <div
+      className={`flex flex-col bg-background ${
+        isSimulator ? 'h-screen overflow-hidden' : 'min-h-screen'
+      }`}
+    >
       <PortalHeader />
 
-      {/* Main Column Body: Leftmost Sidebar + Center Page Content */}
-      <div className="flex flex-1 w-full">
+      <div className="flex min-h-0 flex-1 w-full">
         <Sidebar />
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 min-w-0 max-w-7xl">
-          <Outlet />
+        <main
+          className={`min-w-0 flex-1 overflow-x-hidden ${
+            isSimulator
+              ? 'overflow-hidden px-2 py-2 sm:px-3 sm:py-3'
+              : 'px-4 py-6 sm:px-6 lg:px-8'
+          }`}
+        >
+          <div className={isSimulator ? 'h-full w-full' : 'mx-auto w-full max-w-[1600px]'}>
+            <Outlet />
+          </div>
         </main>
       </div>
 
-      <footer className="border-t border-slate-200 bg-white py-6 text-center text-xs text-slate-500">
-        <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
-          <span>FUNDX • Venture Capital & Royalty Marketplace</span>
-          <span className="text-slate-400">© {new Date().getFullYear()} FundX. All rights reserved.</span>
-        </div>
-      </footer>
+      {!isSimulator && (
+        <footer className="border-t bg-card">
+          <div className="mx-auto flex max-w-[1600px] flex-col gap-2 px-4 py-5 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
+            <span>FundX · Venture capital and royalty marketplace</span>
+            <span>© {new Date().getFullYear()} FundX. All rights reserved.</span>
+          </div>
+        </footer>
+      )}
     </div>
   )
 }

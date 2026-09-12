@@ -43,11 +43,11 @@ def health_check(settings: Settings | None = None) -> dict[str, Any]:
         return {"status": "unavailable", "neo4j": settings.neo4j_uri, "error": str(exc)}
 
 
-# Seed relationship patterns (IDs should match Supabase UUIDs when real data exists):
+# Seed relationship patterns (IDs should match Postgres/Supabase IDs):
+# (:User)-[:OWNS]->(:Startup|:Investor)
 # (:Startup)-[:OPERATES_IN]->(:Industry)
-# (:Startup)-[:COMPETES_WITH]->(:Startup)
-# (:Startup)-[:TARGETS]->(:Market)
-# (:Startup)-[:MAKES_CLAIM]->(:Claim)
-# (:Claim)-[:SUPPORTED_BY]->(:Evidence)
-# (:Investor)-[:INTERESTED_IN]->(:Industry)
-# (:Investor)-[:INTERESTED_IN]->(:Startup)
+# (:Startup)-[:LISTED]->(:Deal)
+# (:Investor)-[:INTERESTED_IN]->(:Industry|:Startup|:Deal)
+# (:Investor)-[:MADE_OFFER]->(:Offer)-[:ON_DEAL]->(:Deal)
+# (:Investor)-[:NEGOTIATED]->(:Deal)
+# See shared/neo4j/graph_sync.py for live writers and scripts/sync_neo4j_from_postgres.py for backfill.

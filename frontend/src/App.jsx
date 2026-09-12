@@ -24,6 +24,7 @@ import InvestorListedDealsPage from './pages/investor/InvestorListedDealsPage'
 import InvestorDealroomPage from './pages/investor/InvestorDealroomPage'
 import InvestorMyDealsPage from './pages/investor/InvestorMyDealsPage'
 import InvestorProfilePage from './pages/investor/InvestorProfilePage'
+import SimulationPage from './pages/SimulationPage'
 
 function DashboardRedirect() {
   const { user } = useAuthContext()
@@ -43,6 +44,7 @@ export default function App() {
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
             <Route path="/dashboard" element={<DashboardRedirect />} />
+            <Route path="/simulation" element={<SimulationPage />} />
 
             {/* Super Admin Portal */}
             <Route path="/admin" element={<AdminDashboardPage />} />
@@ -57,6 +59,7 @@ export default function App() {
             <Route path="/startup/dashboard" element={<StartupDashboardPage />} />
             <Route path="/startup/dealroom" element={<StartupDealroomPage />} />
             <Route path="/startup/verifier" element={<StartupVerifierPage />} />
+            <Route path="/startup/simulator" element={<Navigate to="/simulation" replace />} />
             <Route path="/startup/deals/create" element={<StartupCreateDealPage />} />
 
             {/* Investor Portal */}
@@ -66,6 +69,7 @@ export default function App() {
             <Route path="/investor/dealroom" element={<InvestorDealroomPage />} />
             <Route path="/investor/my-deals" element={<InvestorMyDealsPage />} />
             <Route path="/investor/profile" element={<InvestorProfilePage />} />
+            <Route path="/investor/simulator" element={<Navigate to="/simulation" replace />} />
 
             {/* Legacy Fallbacks */}
             <Route path="/startups" element={<AdminStartupsPage />} />

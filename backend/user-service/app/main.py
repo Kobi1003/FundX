@@ -17,6 +17,13 @@ sys.path.insert(0, "/app")
 
 from shared.auth import optional_current_user, require_current_user  # noqa: E402
 from shared.neo4j_client import health_check as neo4j_health  # noqa: E402
+from shared.neo4j.graph_sync import (  # noqa: E402
+    link_user_investor,
+    link_user_startup,
+    upsert_investor,
+    upsert_startup,
+    upsert_user,
+)
 from shared.supabase_client import supabase_configured  # noqa: E402
 from shared import db  # noqa: E402
 from shared.migrations import run_migrations  # noqa: E402
@@ -402,6 +409,10 @@ async def register(payload: dict[str, Any]) -> dict[str, Any]:
         except Exception:
             pass
 
+        upsert_user(user_id, email=email, full_name=name, role="startup")
+        upsert_startup(startup_id, name=name, stage="Seed", industry=industry, email=email)
+        link_user_startup(user_id, startup_id)
+
         profile = {
             "id": user_id,
             "full_name": name,
@@ -525,6 +536,10 @@ async def register(payload: dict[str, Any]) -> dict[str, Any]:
                 )
         except Exception:
             pass
+
+        upsert_user(user_id, email=email, full_name=name, role="investor")
+        upsert_investor(investor_id, name=name, firm=firm, email=email)
+        link_user_investor(user_id, investor_id)
 
         profile = {
             "id": user_id,

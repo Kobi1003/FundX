@@ -4,6 +4,29 @@ This document describes how the AI service (`backend/ai-service`) executes multi
 
 ---
 
+## 0. Thesis Future Analysis → Financial Simulator
+
+**Principle:** ADK/Gemini interprets & extracts; Python simulates; UI stays deterministic.
+
+```
+Thesis text
+    → run_adk_or_fallback (ADK SequentialAgent if live, else AgentRunner)
+    → ThesisAssumptions + FutureAnalysis (Pydantic)
+    → SimulationRequest → run_scenarios / run_sensitivity
+    → SimulationPage (drivers + Bull/Base/Bear + Future Analysis panels)
+```
+
+| Endpoint | Role |
+|---|---|
+| `POST /api/ai/analyze-thesis` | Full pack: assumptions, future_analysis, scenarios, sensitivity |
+| `POST /api/ai/thesis-simulate` | Alias with `run_full_simulation=true` |
+
+Code: `app/schemas/thesis_extract.py`, `app/agents/orchestrator.py` (`run_adk_or_fallback`), `app/workflows/thesis_analyzer.py`.
+
+UI: paste thesis on `/simulation` (**Analyze & Simulate**), or Create Deal → **Open in Financial Simulator**.
+
+---
+
 ## 1. Startup Analysis Workflow
 
 The primary workflow processes founder thesis and pitch materials through a bounded sequential pipeline:
@@ -44,13 +67,18 @@ The primary workflow processes founder thesis and pitch materials through a boun
 
 ## 2. Deterministic Financial Simulation
 
-Financial projections are executed strictly in Python code (`app/simulation/`):
-- `revenue_model.py`: Calculates compound monthly growth and ARR.
-- `customer_model.py`: Computes customer acquisition, net churn, and cohorts.
-- `cost_model.py`: Models fixed and variable operating costs.
-- `runway_model.py`: Simulates monthly net burn and runway survival in months.
-- `valuation_model.py`: Calculates post-money valuation, pre-money valuation, and dilution.
-- `scenarios.py`: Runs **Bull**, **Base**, and **Bear** cases simultaneously.
+Financial projections are executed strictly in Python (`app/simulation/`):
+- `simulator.py`: Monthly cohort loop for Bull/Base/Bear (`MRR = Customers × ARPU`).
+- `scenarios.py` / `assumptions.py`: Scenario multipliers and historical mean±σ.
+- `sensitivity.py`: One-way sensitivity ranking on ending cash / ARR.
+- `valuation_model.py`: ARR multiple valuation + funding pre/post-money.
+
+Full formula reference: [`docs/FINANCE_SIMULATOR.md`](./FINANCE_SIMULATOR.md).
+
+Outputs are scenario-based projections from supplied assumptions, not financial
+advice or a prediction of actual performance. The request supports `claimed`
+and `verified` simulation cases. Verified mode only replaces metrics with an
+explicit `verified_value` and returns both the original and effective inputs.
 
 ---
 

@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 sys.path.insert(0, "/app")
 
 from shared.neo4j_client import health_check as neo4j_health  # noqa: E402
+from shared.neo4j.graph_sync import set_investor_industries, upsert_investor  # noqa: E402
 from shared.supabase_client import supabase_configured  # noqa: E402
 from shared import db  # noqa: E402
 from shared.local_storage import (  # noqa: E402
@@ -251,6 +252,12 @@ async def ensure_investor(payload: dict[str, Any]) -> dict[str, Any]:
     row = await db.fetchrow("SELECT * FROM public.investors WHERE id = $1", investor_id)
     if row:
         _INVESTORS[investor_id] = row
+        upsert_investor(
+            investor_id,
+            name=row.get("display_name"),
+            firm=row.get("firm"),
+            email=row.get("email"),
+        )
         return row
 
     # In-memory fallback
@@ -268,6 +275,7 @@ async def ensure_investor(payload: dict[str, Any]) -> dict[str, Any]:
         "created_at": datetime.utcnow().isoformat() + "Z",
     }
     _INVESTORS[investor_id] = row
+    upsert_investor(investor_id, name=display_name, firm=firm, email=email)
     return row
 
 
@@ -338,6 +346,12 @@ async def create_investor(payload: InvestorCreate) -> dict[str, Any]:
         **payload.model_dump(),
     }
     _INVESTORS[investor_id] = row
+    upsert_investor(
+        investor_id,
+        name=payload.display_name,
+        firm=payload.firm or "Private Angel",
+        email=payload.email,
+    )
     return row
 
 
@@ -747,6 +761,7 @@ async def update_preferences(investor_id: str, payload: PreferencesUpdate) -> di
         payload.check_size_min, payload.check_size_max, payload.geographies, payload.notes
     )
     _PREFERENCES[investor_id] = payload.model_dump()
+    set_investor_industries(investor_id, payload.industries or [])
     return {"investor_id": investor_id, **payload.model_dump()}
 
 

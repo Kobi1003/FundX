@@ -3,7 +3,49 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuthContext } from '../../context/AuthContext'
 import api from '../../services/api'
 import VerificationBadge from '../../components/VerificationBadge'
-import { ShieldAlert } from 'lucide-react'
+import { BentoGrid, BentoItem } from '../../components/BentoGrid'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
+import {
+  Flame,
+  Zap,
+  Sprout,
+  ShieldAlert,
+  Search,
+  Building2,
+  Handshake,
+} from 'lucide-react'
+
+function getDealInterestConfig(deal) {
+  const status = deal.status || 'published'
+
+  if (status === 'negotiating' || deal.id === 'deal-aerogrid' || (deal.interested_count && deal.interested_count >= 5)) {
+    return {
+      type: 'HOT',
+      label: 'High interest',
+      icon: Flame,
+      badge: 'warning',
+    }
+  }
+
+  if (deal.id === 'deal-finpulse' || deal.id === 'deal-quantumledger' || (deal.interested_count && deal.interested_count >= 2)) {
+    return {
+      type: 'MODERATE',
+      label: 'Active interest',
+      icon: Zap,
+      badge: 'info',
+    }
+  }
+
+  return {
+    type: 'NEW',
+    label: 'Newly listed',
+    icon: Sprout,
+    badge: 'success',
+  }
+}
 
 export default function InvestorListedDealsPage() {
   const navigate = useNavigate()
@@ -14,7 +56,7 @@ export default function InvestorListedDealsPage() {
   const [search, setSearch] = useState('')
   const [industryFilter, setIndustryFilter] = useState('all')
   const [stageFilter, setStageFilter] = useState('all')
-  const [minScore, setMinScore] = useState(0)
+  const [interestFilter, setInterestFilter] = useState('all')
   const [inspectDeal, setInspectDeal] = useState(null)
   const [showGatingModal, setShowGatingModal] = useState(false)
   const [alert, setAlert] = useState(null)
@@ -25,7 +67,6 @@ export default function InvestorListedDealsPage() {
     api
       .listDeals()
       .then((data) => {
-        // Show published, negotiating, and closed deals (all marketplace deals)
         const marketDeals = (data || []).filter((d) => d.status !== 'draft')
         setDeals(marketDeals)
       })
@@ -47,361 +88,295 @@ export default function InvestorListedDealsPage() {
         investor_id: user?.investor_id || 'investor-elena',
         investor_name: user?.full_name || 'Elena Rostova',
       })
-      setAlert({ type: 'success', text: 'Interest registered! The startup founder has been notified.' })
+      setAlert({ type: 'success', text: 'Interest registered. The founder has been notified.' })
     } catch (err) {
       setAlert({ type: 'error', text: err.message })
     }
   }
 
   const filtered = deals.filter((d) => {
+    const config = getDealInterestConfig(d)
     const matchSearch =
       d.title?.toLowerCase().includes(search.toLowerCase()) ||
       d.pitch?.toLowerCase().includes(search.toLowerCase()) ||
       d.startup_name?.toLowerCase().includes(search.toLowerCase())
     const matchIndustry = industryFilter === 'all' || d.industry === industryFilter
     const matchStage = stageFilter === 'all' || d.funding_stage === stageFilter
-    const matchScore = (d.ai_score || 85) >= Number(minScore)
-    return matchSearch && matchIndustry && matchStage && matchScore
+    const matchInterest =
+      interestFilter === 'all' ||
+      (interestFilter === 'hot' && config.type === 'HOT') ||
+      (interestFilter === 'moderate' && config.type === 'MODERATE') ||
+      (interestFilter === 'new' && config.type === 'NEW')
+
+    return matchSearch && matchIndustry && matchStage && matchInterest
   })
 
   const industries = ['all', ...new Set(deals.map((d) => d.industry).filter(Boolean))]
   const stages = ['all', 'Pre-Seed', 'Seed', 'Series A', 'Series B']
+  const hotCount = deals.filter((d) => getDealInterestConfig(d).type === 'HOT').length
+  const moderateCount = deals.filter((d) => getDealInterestConfig(d).type === 'MODERATE').length
+  const newCount = deals.filter((d) => getDealInterestConfig(d).type === 'NEW').length
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-5">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Listed Deals Marketplace</h1>
-          <p className="text-sm text-slate-500 mt-1">
-            Explore verified investment rounds, evaluate AI simulations, and negotiate hybrid equity + royalty term sheets.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <VerificationBadge isVerified={isVerified} size="md" />
-          {!isVerified && (
-            <Link
-              to="/investor/profile"
-              className="rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 px-3.5 py-1.5 text-xs font-bold transition shadow-xs"
-            >
-              Verify CV to Unlock Negotiations
-            </Link>
-          )}
-        </div>
-      </div>
+    <div className="space-y-4 pb-8">
+      <BentoGrid>
+        <BentoItem className="md:col-span-6 xl:col-span-8">
+          <Card>
+            <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="space-y-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h1 className="text-2xl font-semibold tracking-tight">Listed deals</h1>
+                  <VerificationBadge isVerified={isVerified} size="md" />
+                </div>
+                <CardDescription>
+                  Filter verified raises by activity, stage, and sector, then open a dealroom.
+                </CardDescription>
+              </div>
+              {!isVerified && (
+                <Button asChild size="sm">
+                  <Link to="/investor/profile">Verify CV to negotiate</Link>
+                </Button>
+              )}
+            </CardHeader>
+          </Card>
+        </BentoItem>
+        <BentoItem className="md:col-span-6 xl:col-span-4">
+          <Card className="h-full">
+            <CardContent className="grid grid-cols-3 gap-3 p-5">
+              <div className="tile-emerald rounded-lg border p-3">
+                <p className="text-2xl font-semibold tabular-nums text-emerald-800">{deals.length}</p>
+                <p className="text-xs text-muted-foreground">Live rounds</p>
+              </div>
+              <div className="tile-amber rounded-lg border p-3">
+                <p className="text-2xl font-semibold tabular-nums text-amber-800">{hotCount}</p>
+                <p className="text-xs text-muted-foreground">High interest</p>
+              </div>
+              <div className="tile-sky rounded-lg border p-3">
+                <p className="text-2xl font-semibold tabular-nums text-sky-800">{newCount}</p>
+                <p className="text-xs text-muted-foreground">New listings</p>
+              </div>
+            </CardContent>
+          </Card>
+        </BentoItem>
+      </BentoGrid>
 
       {alert && (
-        <div
-          className={`rounded-xl p-4 text-xs font-semibold flex items-center justify-between shadow-xs ${
-            alert.type === 'success'
-              ? 'bg-emerald-50 border border-emerald-300 text-emerald-900'
-              : 'bg-red-50 border border-red-300 text-red-900'
-          }`}
-        >
-          <span>{alert.text}</span>
-          <button onClick={() => setAlert(null)} className="font-bold ml-2 cursor-pointer">✕</button>
-        </div>
+        <Card className={alert.type === 'success' ? 'border-emerald-200 bg-emerald-50' : 'border-red-200 bg-red-50'}>
+          <CardContent className="flex items-center justify-between gap-3 p-4 text-sm">
+            <span>{alert.text}</span>
+            <Button variant="ghost" size="sm" onClick={() => setAlert(null)}>Dismiss</Button>
+          </CardContent>
+        </Card>
       )}
 
-      {/* Deep Filter Bar */}
-      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs space-y-3">
-        <div className="flex flex-col sm:flex-row items-center gap-3">
-          <input
-            type="text"
-            placeholder="Search deals by keywords, technology, or startup name..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full sm:flex-1 rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-          />
-
-          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+      <Card>
+        <CardContent className="space-y-3 p-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search by technology, pitch, or startup…"
+                className="pl-9"
+              />
+            </div>
             <select
               value={industryFilter}
               onChange={(e) => setIndustryFilter(e.target.value)}
-              className="rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              className="h-9 rounded-md border border-input bg-background px-3 text-sm"
             >
               {industries.map((ind) => (
-                <option key={ind} value={ind}>
-                  {ind === 'all' ? 'All Industries' : ind}
-                </option>
+                <option key={ind} value={ind}>{ind === 'all' ? 'All industries' : ind}</option>
               ))}
             </select>
-
             <select
               value={stageFilter}
               onChange={(e) => setStageFilter(e.target.value)}
-              className="rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              className="h-9 rounded-md border border-input bg-background px-3 text-sm"
             >
               {stages.map((stg) => (
-                <option key={stg} value={stg}>
-                  {stg === 'all' ? 'All Stages' : stg}
-                </option>
+                <option key={stg} value={stg}>{stg === 'all' ? 'All stages' : stg}</option>
               ))}
             </select>
-
-            <select
-              value={minScore}
-              onChange={(e) => setMinScore(e.target.value)}
-              className="rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-            >
-              <option value="0">Min AI Score: Any</option>
-              <option value="75">Min AI Score: 75+</option>
-              <option value="85">Min AI Score: 85+ (Tier 1)</option>
-              <option value="90">Min AI Score: 90+ (Exceptional)</option>
-            </select>
           </div>
-        </div>
-      </div>
+          <div className="flex flex-wrap gap-2">
+            {[
+              { id: 'all', label: `All (${deals.length})` },
+              { id: 'hot', label: `High interest (${hotCount})` },
+              { id: 'moderate', label: `Active (${moderateCount})` },
+              { id: 'new', label: `New (${newCount})` },
+            ].map((pill) => (
+              <Button
+                key={pill.id}
+                type="button"
+                size="sm"
+                variant={interestFilter === pill.id ? 'default' : 'outline'}
+                onClick={() => setInterestFilter(pill.id)}
+              >
+                {pill.label}
+              </Button>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
 
-      {/* Deals Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-        {filtered.map((deal) => (
-          <div
-            key={deal.id}
-            className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs hover:border-emerald-300 hover:shadow-md transition flex flex-col justify-between"
-          >
-            <div>
-              {/* Header */}
-              <div className="flex items-start justify-between gap-2">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {filtered.map((deal) => {
+          const config = getDealInterestConfig(deal)
+          const Icon = config.icon
+          return (
+            <Card key={deal.id} className="flex flex-col">
+              <CardHeader className="space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <Badge variant={config.badge} className="flex-nowrap">
+                    <Icon className="size-3" />
+                    {config.label}
+                  </Badge>
+                  <span className="text-xs text-muted-foreground">{deal.funding_stage || 'Seed'}</span>
+                </div>
                 <div>
-                  <span className="font-bold text-sm text-slate-900">{deal.startup_name}</span>
-                  <div className="mt-0.5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <CardTitle className="flex items-center gap-1.5 text-base">
+                      <Building2 className="h-4 w-4 shrink-0 text-muted-foreground" />
+                      {deal.startup_name}
+                    </CardTitle>
                     <VerificationBadge isVerified={deal.startup_verified} size="sm" />
                   </div>
+                  <p className="mt-1.5 text-sm font-medium leading-snug">{deal.title}</p>
+                  <CardDescription className="mt-1 line-clamp-2">{deal.pitch}</CardDescription>
                 </div>
-                <span
-                  className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
-                    deal.status === 'closed'
-                      ? 'bg-purple-100 text-purple-700'
-                      : deal.status === 'negotiating'
-                      ? 'bg-amber-100 text-amber-800'
-                      : 'bg-emerald-100 text-emerald-800'
-                  }`}
-                >
-                  {deal.status}
-                </span>
-              </div>
-
-              {/* Pitch */}
-              <h3 className="font-bold text-slate-900 text-sm mt-3 line-clamp-2">{deal.title}</h3>
-              <p className="text-xs text-slate-500 mt-1 line-clamp-2">{deal.pitch}</p>
-
-              {/* Terms Matrix */}
-              <div className="mt-4 grid grid-cols-3 gap-1.5 rounded-xl bg-slate-50 p-2.5 text-center border border-slate-100">
-                <div>
-                  <span className="text-[9px] font-semibold uppercase text-slate-400">Target</span>
-                  <div className="font-bold text-xs text-slate-900">
-                    ${(Number(deal.target_raise) || 0).toLocaleString()}
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="grid grid-cols-3 gap-2 rounded-md bg-muted/50 p-3 text-center">
+                  <div>
+                    <p className="text-[11px] text-muted-foreground">Target</p>
+                    <p className="text-sm font-semibold">${(Number(deal.target_raise) || 0).toLocaleString()}</p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] text-muted-foreground">Equity</p>
+                    <p className="text-sm font-semibold text-emerald-800">{deal.equity_pct}%</p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] text-muted-foreground">Royalty</p>
+                    <p className="text-sm font-semibold text-amber-800">{deal.royalty_pct || 0}%</p>
                   </div>
                 </div>
-                <div>
-                  <span className="text-[9px] font-semibold uppercase text-slate-400">Equity</span>
-                  <div className="font-bold text-xs text-emerald-700">{deal.equity_pct}%</div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">AI feasibility</span>
+                  <span className="font-medium">{deal.ai_score ? `${deal.ai_score}/100` : '88/100'}</span>
                 </div>
-                <div>
-                  <span className="text-[9px] font-semibold uppercase text-slate-400">Royalty</span>
-                  <div className="font-bold text-xs text-amber-700">{deal.royalty_pct || 0}%</div>
-                </div>
-              </div>
+              </CardContent>
+              <CardFooter className="mt-auto gap-2">
+                <Button variant="outline" size="sm" onClick={() => setInspectDeal(deal)}>
+                  Thesis
+                </Button>
+                <Button size="sm" className="flex-1" onClick={() => handleNegotiateClick(deal)}>
+                  <Handshake />
+                  {isVerified ? 'Enter dealroom' : 'Verify to negotiate'}
+                </Button>
+              </CardFooter>
+            </Card>
+          )
+        })}
 
-              {/* AI Score & Payout Terms */}
-              <div className="mt-3 space-y-1.5 text-xs text-slate-600">
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-400">AI Feasibility Score:</span>
-                  <span className="font-bold text-emerald-700">
-                    {deal.ai_score ? `${deal.ai_score}/100` : '88/100'}
-                  </span>
-                </div>
-                <div className="flex items-start justify-between gap-2 text-[11px]">
-                  <span className="text-slate-400 whitespace-nowrap">Payout Terms:</span>
-                  <span className="font-medium text-slate-700 text-right truncate">
-                    {deal.royalty_payout_terms || 'Standard'}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div className="mt-5 pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
-              <button
-                type="button"
-                onClick={() => setInspectDeal(deal)}
-                className="rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 text-xs font-semibold transition cursor-pointer"
-              >
-                Thesis Details
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleNegotiateClick(deal)}
-                className={`rounded-lg px-3.5 py-1.5 text-xs font-bold transition shadow-xs cursor-pointer ${
-                  isVerified
-                    ? 'bg-[#0f3d2e] hover:bg-[#165540] text-white'
-                    : 'bg-amber-400 hover:bg-amber-300 text-slate-950'
-                }`}
-              >
-                {isVerified ? 'Negotiate Deal →' : 'Negotiate (Verify CV)'}
-              </button>
-            </div>
-          </div>
-        ))}
-
-        {filtered.length === 0 && !loading && (
-          <div className="col-span-full p-12 text-center text-slate-400 border border-dashed border-slate-300 rounded-2xl">
-            No deals found matching your filters.
-          </div>
+        {(loading || filtered.length === 0) && (
+          <Card className="col-span-full">
+            <CardContent className="p-12 text-center text-sm text-muted-foreground">
+              {loading
+                ? 'Loading marketplace rounds…'
+                : 'No deals match the current filters.'}
+            </CardContent>
+          </Card>
         )}
       </div>
 
-      {/* Deal Detail Inspection Modal */}
       {inspectDeal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <Card className="max-h-[90vh] w-full max-w-2xl overflow-y-auto">
+            <CardHeader className="flex flex-row items-start justify-between">
               <div>
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                  {inspectDeal.funding_stage} • {inspectDeal.industry}
-                </span>
-                <h3 className="font-bold text-lg text-slate-900 mt-0.5">{inspectDeal.title}</h3>
+                <CardDescription>{inspectDeal.funding_stage} · {inspectDeal.industry}</CardDescription>
+                <CardTitle className="mt-1">{inspectDeal.title}</CardTitle>
               </div>
-              <button
-                onClick={() => setInspectDeal(null)}
-                className="text-slate-400 hover:text-slate-600 text-xl font-bold cursor-pointer"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="mt-4 space-y-4 text-xs">
+              <Button variant="ghost" size="sm" onClick={() => setInspectDeal(null)}>Close</Button>
+            </CardHeader>
+            <CardContent className="space-y-4">
               <div>
-                <h4 className="font-bold text-slate-900 mb-1">One-Line Pitch</h4>
-                <p className="text-slate-700 bg-slate-50 p-3 rounded-lg">{inspectDeal.pitch}</p>
+                <p className="mb-1 text-sm font-medium">Pitch</p>
+                <p className="rounded-md bg-muted/50 p-3 text-sm">{inspectDeal.pitch}</p>
               </div>
-
               {inspectDeal.thesis && (
                 <div>
-                  <h4 className="font-bold text-slate-900 mb-1">Founder Investment Thesis</h4>
-                  <p className="text-slate-700 bg-slate-50 p-3 rounded-lg italic leading-relaxed">
-                    {inspectDeal.thesis}
-                  </p>
+                  <p className="mb-1 text-sm font-medium">Thesis</p>
+                  <p className="rounded-md bg-muted/50 p-3 text-sm leading-relaxed">{inspectDeal.thesis}</p>
                 </div>
               )}
-
-              {/* Terms Callout */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
-                <div className="bg-slate-50 p-3 rounded-xl">
-                  <span className="text-slate-400 text-[10px] uppercase font-semibold">Target Raise</span>
-                  <div className="font-bold text-slate-900 text-sm mt-0.5">
-                    ${(Number(inspectDeal.target_raise) || 0).toLocaleString()}
-                  </div>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <div className="rounded-md border p-3 text-center">
+                  <p className="text-xs text-muted-foreground">Target</p>
+                  <p className="font-semibold">${(Number(inspectDeal.target_raise) || 0).toLocaleString()}</p>
                 </div>
-                <div className="bg-slate-50 p-3 rounded-xl">
-                  <span className="text-slate-400 text-[10px] uppercase font-semibold">Equity</span>
-                  <div className="font-bold text-emerald-700 text-sm mt-0.5">{inspectDeal.equity_pct}%</div>
+                <div className="rounded-md border p-3 text-center">
+                  <p className="text-xs text-muted-foreground">Equity</p>
+                  <p className="font-semibold">{inspectDeal.equity_pct}%</p>
                 </div>
-                <div className="bg-slate-50 p-3 rounded-xl">
-                  <span className="text-slate-400 text-[10px] uppercase font-semibold">Royalty</span>
-                  <div className="font-bold text-amber-700 text-sm mt-0.5">{inspectDeal.royalty_pct || 0}%</div>
+                <div className="rounded-md border p-3 text-center">
+                  <p className="text-xs text-muted-foreground">Royalty</p>
+                  <p className="font-semibold">{inspectDeal.royalty_pct || 0}%</p>
                 </div>
-                <div className="bg-slate-50 p-3 rounded-xl">
-                  <span className="text-slate-400 text-[10px] uppercase font-semibold">AI Feasibility</span>
-                  <div className="font-bold text-emerald-700 text-sm mt-0.5">
-                    {inspectDeal.ai_score ? `${inspectDeal.ai_score}/100` : '88/100'}
-                  </div>
+                <div className="rounded-md border p-3 text-center">
+                  <p className="text-xs text-muted-foreground">AI score</p>
+                  <p className="font-semibold">{inspectDeal.ai_score ? `${inspectDeal.ai_score}/100` : '88/100'}</p>
                 </div>
               </div>
-
-              {/* Simulation Scenarios if available */}
-              {inspectDeal.ai_report?.simulation && (
-                <div className="rounded-xl border border-slate-200 p-4 space-y-2">
-                  <h4 className="font-bold text-slate-900">AI Market Simulation Projections</h4>
-                  <div className="grid grid-cols-3 gap-2 text-center text-[11px]">
-                    <div className="p-2 rounded bg-emerald-50 text-emerald-950 font-medium">
-                      <span className="block font-bold">Bull Case</span>
-                      ${(inspectDeal.ai_report.simulation.bull.annual_revenue || 0).toLocaleString()}
-                    </div>
-                    <div className="p-2 rounded bg-slate-100 text-slate-900 font-medium">
-                      <span className="block font-bold">Base Case</span>
-                      ${(inspectDeal.ai_report.simulation.base.annual_revenue || 0).toLocaleString()}
-                    </div>
-                    <div className="p-2 rounded bg-amber-50 text-amber-950 font-medium">
-                      <span className="block font-bold">Bear Case</span>
-                      ${(inspectDeal.ai_report.simulation.bear.annual_revenue || 0).toLocaleString()}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="mt-6 flex justify-between items-center pt-3 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => handleExpressInterest(inspectDeal.id)}
-                className="rounded-lg border border-slate-300 bg-white hover:bg-slate-100 px-4 py-2 text-xs font-semibold text-slate-700 transition cursor-pointer"
+            </CardContent>
+            <CardFooter className="justify-between">
+              <Button variant="outline" onClick={() => handleExpressInterest(inspectDeal.id)}>
+                Express interest
+              </Button>
+              <Button
+                onClick={() => {
+                  setInspectDeal(null)
+                  handleNegotiateClick(inspectDeal)
+                }}
               >
-                Express Interest
-              </button>
-
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setInspectDeal(null)}
-                  className="rounded-lg bg-slate-100 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-200 transition cursor-pointer"
-                >
-                  Close
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setInspectDeal(null)
-                    handleNegotiateClick(inspectDeal)
-                  }}
-                  className="rounded-lg bg-[#0f3d2e] hover:bg-[#165540] text-white px-5 py-2 text-xs font-bold transition shadow-xs cursor-pointer"
-                >
-                  Enter Dealroom to Negotiate →
-                </button>
-              </div>
-            </div>
-          </div>
+                Enter dealroom
+              </Button>
+            </CardFooter>
+          </Card>
         </div>
       )}
 
-      {/* Verification Gating Modal */}
       {showGatingModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl border border-amber-300">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-900 font-black">
-                <ShieldAlert className="h-6 w-6 text-amber-900" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <Card className="w-full max-w-md">
+            <CardHeader>
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-100 text-amber-900">
+                  <ShieldAlert className="h-5 w-5" />
+                </div>
+                <div>
+                  <CardTitle>Verification required</CardTitle>
+                  <CardDescription>AI CV verification is required to negotiate.</CardDescription>
+                </div>
               </div>
-              <div>
-                <h3 className="font-bold text-base text-slate-900">Verification Requirement</h3>
-                <p className="text-xs text-amber-800 font-semibold">AI CV Accreditation Mandatory</p>
-              </div>
-            </div>
-
-            <p className="text-xs text-slate-600 leading-relaxed">
-              To enter the Dealroom, submit binding term sheets, or negotiate deal terms, platform security requires that you upload your Curriculum Vitae (CV) and obtain the <span className="font-bold text-emerald-700">AI Verified Investor</span> badge.
-            </p>
-
-            <div className="mt-6 flex justify-end gap-2 pt-3 border-t border-slate-100">
-              <button
-                onClick={() => setShowGatingModal(false)}
-                className="rounded-lg bg-slate-100 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-200 cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
+            </CardHeader>
+            <CardContent className="text-sm text-muted-foreground">
+              Upload a PDF CV and obtain the <span className="font-medium text-foreground">AI{'\u00A0'}Verified</span> badge before entering a dealroom.
+            </CardContent>
+            <CardFooter className="justify-end gap-2">
+              <Button variant="outline" onClick={() => setShowGatingModal(false)}>Cancel</Button>
+              <Button
                 onClick={() => {
                   setShowGatingModal(false)
                   navigate('/investor/profile')
                 }}
-                className="rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 px-5 py-2 text-xs font-bold transition shadow-xs cursor-pointer"
               >
-                Upload CV & Verify Now →
-              </button>
-            </div>
-          </div>
+                Upload CV
+              </Button>
+            </CardFooter>
+          </Card>
         </div>
       )}
     </div>

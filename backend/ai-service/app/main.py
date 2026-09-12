@@ -23,6 +23,7 @@ from app.schemas.requests import (  # noqa: E402
     StartupAnalysisRequest,
 )
 from app.simulation.simulator import run_scenarios  # noqa: E402
+from app.simulation.sensitivity import run_sensitivity  # noqa: E402
 from app.workflows.investor_analysis import run_investor_analysis  # noqa: E402
 from app.workflows.negotiation import run_negotiation  # noqa: E402
 from app.workflows.startup_analysis import run_startup_analysis  # noqa: E402
@@ -36,6 +37,14 @@ SERVICE_NAME = os.getenv("SERVICE_NAME", "ai-service")
 app = FastAPI(title="AI Service", version="0.1.0")
 
 _ANALYSIS_JOBS: dict[str, dict[str, Any]] = {}
+_SIMULATION_RESULTS: dict[str, dict[str, Any]] = {}
+
+
+def _record_simulation(payload: SimulationRequest) -> dict[str, Any]:
+    """In-memory audit store for the MVP; its API is ready for durable storage."""
+    result = run_scenarios(payload)
+    _SIMULATION_RESULTS[result["simulation_id"]] = result
+    return result
 
 
 async def _execute_analysis_job(job_id: str, payload: StartupAnalysisRequest) -> None:
@@ -105,7 +114,25 @@ async def negotiation(payload: NegotiationRequest) -> dict[str, Any]:
 @app.post("/ai/simulate")
 async def simulate(payload: SimulationRequest) -> dict[str, Any]:
     """Deterministic math only — no LLM tokens."""
-    return run_scenarios(payload)
+    return _record_simulation(payload)
+
+
+@app.post("/ai/simulation/scenarios")
+async def simulation_scenarios(payload: SimulationRequest) -> dict[str, Any]:
+    """Explicit scenario endpoint; retained /ai/simulate remains backward-compatible."""
+    return _record_simulation(payload)
+
+
+@app.post("/ai/simulation/sensitivity")
+async def simulation_sensitivity(payload: SimulationRequest) -> dict[str, Any]:
+    return {"baseline": _record_simulation(payload)["scenarios"]["base"], "sensitivity": run_sensitivity(payload)}
+
+
+@app.get("/ai/simulation/{simulation_id}")
+async def get_simulation(simulation_id: str) -> dict[str, Any]:
+    if simulation_id not in _SIMULATION_RESULTS:
+        raise HTTPException(status_code=404, detail="Simulation not found")
+    return _SIMULATION_RESULTS[simulation_id]
 
 
 @app.get("/ai/demo/sample")
@@ -189,4 +216,11 @@ async def verify_investor_endpoint(payload: dict[str, Any]) -> dict[str, Any]:
 @app.post("/ai/analyze-thesis")
 async def analyze_thesis_endpoint(payload: dict[str, Any]) -> dict[str, Any]:
     return await run_thesis_analysis(payload)
+
+
+@app.post("/ai/thesis-simulate")
+async def thesis_simulate_endpoint(payload: dict[str, Any]) -> dict[str, Any]:
+    """Alias: thesis future analysis + full deterministic simulation pack for Simulator UI."""
+    body = {**payload, "run_full_simulation": True}
+    return await run_thesis_analysis(body)
 
