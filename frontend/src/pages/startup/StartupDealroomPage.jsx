@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useAuthContext } from '../../context/AuthContext'
 import api from '../../services/api'
+import NegotiationArenaTree from '../../components/NegotiationArenaTree'
 import { CheckCircle2, Handshake, ShieldCheck, Zap, Circle, ArrowRight } from 'lucide-react'
 
 export default function StartupDealroomPage() {
@@ -426,120 +427,16 @@ export default function StartupDealroomPage() {
                 </div>
               )}
 
-              {/* Negotiation Offers Timeline */}
-              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs">
-                <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
-                  <div>
-                    <h3 className="text-sm font-bold text-slate-900">
-                      Negotiation Tree & Received Offers ({treeData?.timeline?.length || 0})
-                    </h3>
-                    <p className="text-xs text-slate-500">
-                      Step-by-step history of term adjustments, founder counters, and active offers.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  {(treeData?.timeline || []).map((step) => {
-                    const isStartup = step.sender_type === 'startup'
-                    const isActive = step.status === 'active'
-                    const isAccepted = step.status === 'accepted'
-
-                    return (
-                      <div
-                        key={step.id}
-                        className={`rounded-xl border p-4 transition ${
-                          isAccepted
-                            ? 'border-emerald-300 bg-emerald-50/50'
-                            : isActive
-                            ? 'border-amber-300 bg-amber-50/30 shadow-xs'
-                            : 'border-slate-200 bg-white'
-                        }`}
-                      >
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs mb-2">
-                          <div className="flex items-center gap-2">
-                            <span className="text-base">{isStartup ? '🚀' : '💼'}</span>
-                            <span className="font-bold text-slate-900">{step.sender_name}</span>
-                            <span className="text-[10px] text-slate-400">
-                              ({isStartup ? 'Company Counter' : 'Investor Proposal'})
-                            </span>
-                          </div>
-
-                          <span
-                            className={`self-start sm:self-auto rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
-                              isAccepted
-                                ? 'bg-emerald-100 text-emerald-800'
-                                : isActive
-                                ? 'bg-amber-100 text-amber-800 animate-pulse'
-                                : 'bg-slate-100 text-slate-500'
-                            }`}
-                          >
-                            {step.status?.toUpperCase()}
-                          </span>
-                        </div>
-
-                        {/* Terms Pill */}
-                        <div className="mt-2 flex flex-wrap items-center gap-4 text-xs font-semibold text-slate-800 bg-slate-50/80 p-2.5 rounded-lg border border-slate-100">
-                          <div>
-                            <span className="text-slate-400 text-[10px] block">Capital</span>
-                            <span>${(Number(step.amount) || 0).toLocaleString()}</span>
-                          </div>
-                          <div>
-                            <span className="text-slate-400 text-[10px] block">Equity</span>
-                            <span className="text-emerald-700">{step.equity_pct}%</span>
-                          </div>
-                          <div>
-                            <span className="text-slate-400 text-[10px] block">Royalty</span>
-                            <span className="text-amber-700">{step.royalty_pct}%</span>
-                          </div>
-                          <div className="flex-1">
-                            <span className="text-slate-400 text-[10px] block">Payout</span>
-                            <span className="text-slate-600 truncate block">
-                              {step.royalty_payout_terms || 'Standard'}
-                            </span>
-                          </div>
-                        </div>
-
-                        {step.message && (
-                          <p className="mt-2.5 text-xs text-slate-600 italic leading-relaxed">
-                            &ldquo;{step.message}&rdquo;
-                          </p>
-                        )}
-
-                        {/* Actions for Founder on Active Investor Offer */}
-                        {isActive && !isStartup && selectedDeal.status !== 'closed' && (
-                          <div className="mt-3 pt-3 border-t border-amber-200/60 flex items-center justify-end gap-2">
-                            <button
-                              type="button"
-                              onClick={() => handleRejectOffer(step.id)}
-                              disabled={actionLoading}
-                              className="rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 text-xs font-semibold transition cursor-pointer"
-                            >
-                              Reject
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => openCounterModal(step)}
-                              disabled={actionLoading}
-                              className="rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 px-3.5 py-1.5 text-xs font-bold transition cursor-pointer shadow-xs"
-                            >
-                              Counter-Offer Terms
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleAcceptOffer(step.id)}
-                              disabled={actionLoading}
-                              className="rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white px-4 py-1.5 text-xs font-bold transition cursor-pointer shadow-xs"
-                            >
-                              Accept & Close Deal ✓
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
+              {/* High-Fidelity Negotiation Arena & Bidding History Tree */}
+              <NegotiationArenaTree
+                timeline={treeData?.timeline}
+                deal={selectedDeal}
+                userRole="startup"
+                actionLoading={actionLoading}
+                onAccept={handleAcceptOffer}
+                onReject={handleRejectOffer}
+                onCounter={openCounterModal}
+              />
 
               {/* Dealroom Real-Time Messages */}
               <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs">

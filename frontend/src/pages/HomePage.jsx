@@ -1,5 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuthContext } from '../context/AuthContext'
+import PageTransition from '../components/PageTransition'
 import { BentoGrid, BentoItem } from '../components/BentoGrid'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
@@ -65,7 +66,7 @@ export default function HomePage() {
   }
 
   return (
-    <div className="space-y-6 pb-8">
+    <PageTransition className="space-y-6 pb-8">
       <BentoGrid>
         <BentoItem className="md:col-span-6 xl:col-span-8">
           <Card className="h-full overflow-hidden bg-primary text-primary-foreground">
@@ -250,6 +251,6 @@ export default function HomePage() {
           </Card>
         </BentoItem>
       </BentoGrid>
-    </div>
+    </PageTransition>
   )
 }

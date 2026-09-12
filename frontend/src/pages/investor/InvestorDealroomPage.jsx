@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuthContext } from '../../context/AuthContext'
 import api from '../../services/api'
 import VerificationBadge from '../../components/VerificationBadge'
+import NegotiationArenaTree from '../../components/NegotiationArenaTree'
 import {
   Handshake,
   Building2,
@@ -478,110 +479,15 @@ export default function InvestorDealroomPage() {
                 </div>
               </div>
 
-              {/* RECENT OFFERS & TERM SHEET PROGRESSION FOR THIS SPECIFIC DEAL */}
-              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs space-y-4">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                  <div>
-                    <h3 className="text-sm font-black text-slate-900 tracking-tight flex items-center gap-1.5">
-                      <FileText className="w-4 h-4 text-emerald-700" />
-                      <span>Recent Offers & Term Sheet History for {selectedDeal.startup_name}</span>
-                    </h3>
-                    <p className="text-xs text-slate-500">Live term sheet proposals and counter-offers for this deal</p>
-                  </div>
-                  <span className="rounded-full bg-emerald-50 text-emerald-900 text-[10px] font-bold px-2.5 py-0.5 border border-emerald-200">
-                    {steps.length} Offers Logged
-                  </span>
-                </div>
-
-                {/* Offer Timeline Stack */}
-                <div className="space-y-4">
-                  {steps.map((step, idx) => {
-                    const isStartup = step.sender_type === 'startup'
-                    const isActive = step.status === 'active'
-
-                    return (
-                      <div
-                        key={step.id || idx}
-                        className={`rounded-2xl border p-4 transition-all shadow-xs ${
-                          isActive
-                            ? 'border-emerald-500 bg-emerald-50/50 ring-2 ring-emerald-400/20'
-                            : 'border-slate-200 bg-white'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-2">
-                            <span className="font-black text-xs text-slate-900">{step.investor_name}</span>
-                            <span className="text-[10px] font-bold text-slate-400">
-                              ({isStartup ? 'Startup Founder' : 'Investor Syndicate'})
-                            </span>
-                          </div>
-
-                          <span
-                            className={`px-2.5 py-0.5 rounded-full text-[10px] font-black ${
-                              step.status === 'active'
-                                ? 'bg-amber-400 text-slate-950'
-                                : step.status === 'accepted'
-                                ? 'bg-emerald-600 text-white'
-                                : 'bg-slate-200 text-slate-700'
-                            }`}
-                          >
-                            {step.status?.toUpperCase()}
-                          </span>
-                        </div>
-
-                        {/* Proposal Terms Matrix */}
-                        <div className="mt-2.5 grid grid-cols-4 gap-2 text-xs font-semibold text-slate-900 bg-slate-50 p-3 rounded-xl border border-slate-100">
-                          <div>
-                            <span className="text-slate-400 text-[9px] font-bold uppercase block">Capital</span>
-                            <span className="font-black">${(Number(step.amount) || 0).toLocaleString()}</span>
-                          </div>
-                          <div>
-                            <span className="text-slate-400 text-[9px] font-bold uppercase block">Equity</span>
-                            <span className="font-black text-emerald-700">{step.equity_pct}%</span>
-                          </div>
-                          <div>
-                            <span className="text-slate-400 text-[9px] font-bold uppercase block">Royalty</span>
-                            <span className="font-black text-amber-700">{step.royalty_pct}%</span>
-                          </div>
-                          <div>
-                            <span className="text-slate-400 text-[9px] font-bold uppercase block">Payout Cap</span>
-                            <span className="font-semibold text-slate-600 text-[10px] truncate block">
-                              {step.royalty_payout_terms || 'Standard'}
-                            </span>
-                          </div>
-                        </div>
-
-                        {step.message && (
-                          <p className="mt-2 text-xs text-slate-600 italic bg-white p-2.5 rounded-lg border border-slate-100 leading-relaxed">
-                            &ldquo;{step.message}&rdquo;
-                          </p>
-                        )}
-
-                        {/* Direct Action Buttons on Active Proposals */}
-                        {isActive && isStartup && selectedDeal.status !== 'closed' && (
-                          <div className="mt-3 pt-3 border-t border-emerald-200 flex items-center justify-end gap-2">
-                            <button
-                              type="button"
-                              onClick={handleOpenOfferModal}
-                              className="rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 px-4 py-2 text-xs font-bold transition cursor-pointer shadow-xs"
-                            >
-                              Counter-Offer
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleAcceptCounter(step.id)}
-                              disabled={actionLoading}
-                              className="rounded-xl bg-[#0f3d2e] hover:bg-[#165540] text-white px-4 py-2 text-xs font-bold transition cursor-pointer shadow-xs"
-                            >
-                              Accept Terms & Close Deal ✓
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
+              {/* High-Fidelity Negotiation Arena & Bidding History Tree */}
+              <NegotiationArenaTree
+                timeline={treeData?.timeline}
+                deal={selectedDeal}
+                userRole="investor"
+                actionLoading={actionLoading}
+                onAccept={handleAcceptCounter}
+                onCounter={handleOpenOfferModal}
+              />
             </>
           ) : (
             <div className="rounded-2xl border border-slate-200 bg-white p-12 text-center text-slate-400">
