@@ -282,14 +282,13 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="max-w-xl mx-auto py-8">
-      <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-md">
-        {/* Header */}
-        <div className="text-center mb-6 flex flex-col items-center">
-          <img src="/logoidea.jpeg" alt="FundX Logo" className="h-14 w-auto mb-3 object-contain rounded-lg" />
-          <h1 className="text-2xl font-black tracking-tight text-slate-900">Create Your FundX Account</h1>
-          <p className="text-xs text-slate-500 mt-1">
-            Choose your account role to join the autonomous investment arena
+    <div className="mx-auto max-w-xl py-8">
+      <div className="rounded-xl border bg-card p-8 shadow-sm">
+        <div className="mb-6 flex flex-col items-center text-center">
+          <img src="/logoidea.jpeg" alt="FundX Logo" className="mb-3 h-14 w-auto rounded-lg object-contain" />
+          <h1 className="text-2xl font-semibold tracking-tight">Create your FundX account</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Choose a role to join the marketplace.
           </p>
         </div>
 
