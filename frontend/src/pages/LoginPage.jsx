@@ -1,7 +1,14 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAuthContext, DEMO_ACCOUNTS } from '../context/AuthContext'
 import api from '../services/api'
+import { BentoGrid, BentoItem } from '../components/BentoGrid'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Separator } from '@/components/ui/separator'
+import { Badge } from '@/components/ui/badge'
 
 export default function LoginPage() {
   const navigate = useNavigate()
@@ -20,7 +27,6 @@ export default function LoginPage() {
     setLoading(true)
     setError(null)
 
-    // Check for Admin Credentials defined in .env
     if (email.trim().toLowerCase() === adminEmail.toLowerCase()) {
       if (password && password !== adminPassword) {
         setError('Invalid admin password')
@@ -40,7 +46,6 @@ export default function LoginPage() {
       else if (res.user?.role === 'startup') navigate('/startup/dashboard')
       else navigate('/investor/dashboard')
     } catch (err) {
-      // Fallback demo matching if microservice is offline
       if (email.toLowerCase().includes('founder') || email.toLowerCase().includes('startup')) {
         loginAs('startup')
         navigate('/startup/dashboard')
@@ -55,79 +60,116 @@ export default function LoginPage() {
     }
   }
 
+  const enterDemo = (key, path) => {
+    loginAs(key)
+    navigate(path)
+  }
+
   return (
-    <div className="max-w-md mx-auto py-12 px-4">
-      <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-lg space-y-6">
-        {/* Header */}
-        <div className="text-center flex flex-col items-center">
-          <img src="/logoidea.jpeg" alt="FundX Logo" className="h-16 w-auto mb-3 object-contain rounded-xl shadow-xs" />
-          <h1 className="text-2xl font-black tracking-tight text-slate-900">Sign In to FundX</h1>
-          <p className="text-xs text-slate-500 mt-1">
-            Access your autonomous investment portal account
-          </p>
-        </div>
+    <div className="py-8">
+      <BentoGrid>
+        <BentoItem className="md:col-span-6 xl:col-span-7">
+          <Card className="h-full">
+            <CardHeader>
+              <CardTitle className="text-2xl">Sign in to FundX</CardTitle>
+              <CardDescription>Use your portal account to open the desk.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              {error && (
+                <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+                  {error}
+                </div>
+              )}
 
-        {error && (
-          <div className="rounded-xl bg-red-50 border border-red-200 p-3 text-xs text-red-700 font-medium">
-            {error}
-          </div>
-        )}
+              <form onSubmit={handleLogin} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    required
+                    placeholder="name@example.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="password">Password</Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    required
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                  />
+                </div>
+                <Button type="submit" className="w-full" disabled={loading}>
+                  {loading ? 'Signing in…' : 'Sign in'}
+                </Button>
+              </form>
 
-        {/* Standard Login Form */}
-        <form onSubmit={handleLogin} className="space-y-4 text-xs">
-          <div>
-            <label className="block font-semibold text-slate-700 mb-1">Email Address</label>
-            <input
-              type="email"
-              required
-              placeholder="name@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-xs text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-slate-50/50"
-            />
-          </div>
+              <Separator />
 
-          <div>
-            <label className="block font-semibold text-slate-700 mb-1">Password</label>
-            <input
-              type="password"
-              required
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-xs text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-slate-50/50"
-            />
-          </div>
+              <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
+                <span>Need an account?</span>
+                <div className="flex gap-2">
+                  <Button asChild variant="link" size="sm">
+                    <Link to="/register?role=startup">Startup</Link>
+                  </Button>
+                  <Button asChild variant="link" size="sm">
+                    <Link to="/register?role=investor">Investor</Link>
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </BentoItem>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full rounded-xl bg-[#0f3d2e] hover:bg-[#165540] text-white py-3 text-xs font-bold transition shadow-sm cursor-pointer disabled:opacity-50 mt-2"
-          >
-            {loading ? 'Authenticating...' : 'Sign In'}
-          </button>
-        </form>
-
-        {/* Signup Links as specified */}
-        <div className="pt-4 border-t border-slate-100 text-center space-y-2">
-          <p className="text-xs text-slate-500">Don't have an account?</p>
-          <div className="flex items-center justify-center gap-4 text-xs font-bold">
-            <a
-              href="/register?role=startup"
-              className="text-[#0f3d2e] hover:text-[#165540] underline hover:no-underline transition"
-            >
-              Signup as Startup
-            </a>
-            <span className="text-slate-300">•</span>
-            <a
-              href="/register?role=investor"
-              className="text-[#0f3d2e] hover:text-[#165540] underline hover:no-underline transition"
-            >
-              Signup as Investor
-            </a>
-          </div>
-        </div>
-      </div>
+        <BentoItem className="md:col-span-6 xl:col-span-5">
+          <Card className="h-full">
+            <CardHeader>
+              <CardTitle>Demo workspaces</CardTitle>
+              <CardDescription>Jump into a role without creating an account.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <button
+                type="button"
+                onClick={() => enterDemo('investor', '/investor/dashboard')}
+                className="tile-sky w-full rounded-lg border p-4 text-left transition-colors hover:bg-sky-100/70"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <p className="font-medium">{DEMO_ACCOUNTS.investor.full_name}</p>
+                  <Badge variant="info">Investor</Badge>
+                </div>
+                <p className="mt-1 text-sm text-muted-foreground">{DEMO_ACCOUNTS.investor.firm}</p>
+              </button>
+              <button
+                type="button"
+                onClick={() => enterDemo('startup', '/startup/dashboard')}
+                className="tile-emerald w-full rounded-lg border p-4 text-left transition-colors hover:bg-emerald-100/70"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <p className="font-medium">{DEMO_ACCOUNTS.startup.full_name}</p>
+                  <Badge variant="success">Founder</Badge>
+                </div>
+                <p className="mt-1 text-sm text-muted-foreground">{DEMO_ACCOUNTS.startup.startup_name}</p>
+              </button>
+              <button
+                type="button"
+                onClick={() => enterDemo('admin', '/admin/dashboard')}
+                className="tile-amber w-full rounded-lg border p-4 text-left transition-colors hover:bg-amber-100/70"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <p className="font-medium">{DEMO_ACCOUNTS.admin.full_name}</p>
+                  <Badge variant="warning">Admin</Badge>
+                </div>
+                <p className="mt-1 text-sm text-muted-foreground">Platform governance</p>
+              </button>
+            </CardContent>
+          </Card>
+        </BentoItem>
+      </BentoGrid>
     </div>
   )
 }

@@ -88,8 +88,8 @@ export default function Logo({
       />
       {showText && (
         <div className="flex flex-col justify-center">
-          <span className={`font-black tracking-tight ${textSizeClasses[size] || textSizeClasses.md} font-poppins ${textColor} leading-none`}>
-            FUND<span className="text-emerald-400">X</span>
+          <span className={`font-semibold tracking-tight ${textSizeClasses[size] || textSizeClasses.md} ${textColor} leading-none`}>
+            FUND<span className="text-primary">X</span>
           </span>
         </div>
       )}

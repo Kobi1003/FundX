@@ -1,16 +1,26 @@
+import {
+  Card as ShadCard,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+  CardAction,
+} from '@/components/ui/card'
+import { cn } from '@/lib/utils'
+
 export default function Card({ title, subtitle, action, children, className = '', hover = true }) {
   return (
-    <section className={`glass-panel p-5 ${hover ? 'glass-panel-hover' : ''} ${className}`}>
+    <ShadCard className={cn(hover && 'transition-shadow hover:shadow-md', className)}>
       {(title || action) && (
-        <div className="mb-4 flex items-center justify-between gap-3 border-b border-slate-800/80 pb-3">
-          <div>
-            {title && <h2 className="text-base font-bold tracking-tight text-slate-100">{title}</h2>}
-            {subtitle && <p className="mt-0.5 text-xs text-slate-400">{subtitle}</p>}
+        <CardHeader className="flex flex-row items-start justify-between gap-3">
+          <div className="space-y-1">
+            {title && <CardTitle>{title}</CardTitle>}
+            {subtitle && <CardDescription>{subtitle}</CardDescription>}
           </div>
-          {action && <div>{action}</div>}
-        </div>
+          {action ? <CardAction className="static">{action}</CardAction> : null}
+        </CardHeader>
       )}
-      {children}
-    </section>
+      <CardContent className={title || action ? '' : 'pt-5'}>{children}</CardContent>
+    </ShadCard>
   )
 }
