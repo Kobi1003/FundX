@@ -131,7 +131,7 @@ class SimulationRequest(BaseModel):
     historical_gross_margins: list[float] = Field(default_factory=list)
     simulation_case: Literal["claimed", "verified"] = "claimed"
     verification_metrics: dict[str, VerifiedMetric] = Field(default_factory=dict)
-    authoritative_mrr_basis: Literal["customers_arpu", "reported_mrr"] = "customers_arpu"
+    authoritative_mrr_basis: Literal["customers_arpu", "reported_mrr"] = "reported_mrr"
 
     @model_validator(mode="after")
     def normalize_legacy_fields(self) -> "SimulationRequest":
@@ -150,12 +150,10 @@ class SimulationRequest(BaseModel):
         if self.starting_churn_rate is not None:
             self.churn = self.starting_churn_rate
 
-        # Reconcile Starting MRR, Customers, and ARPU
-        if self.current_customers > 0 and self.pricing > 0:
-            if self.authoritative_mrr_basis == "customers_arpu" or self.current_revenue == 0:
-                self.current_revenue = float(self.current_customers * self.pricing)
-            elif self.authoritative_mrr_basis == "reported_mrr" and self.current_revenue > 0:
-                self.pricing = float(self.current_revenue / self.current_customers)
+        # Customers × ARPU drives scenario revenue (Bull/Base/Bear scale with logos).
+        # Keep current_mrr as the user-entered figure for inconsistency warnings only.
+        if self.authoritative_mrr_basis == "customers_arpu" and self.current_customers > 0 and self.pricing > 0:
+            self.current_revenue = float(self.current_customers * self.pricing)
         elif self.current_customers > 0 and self.current_revenue > 0 and self.pricing == 0:
             self.pricing = float(self.current_revenue / self.current_customers)
         elif self.pricing > 0 and self.current_revenue > 0 and self.current_customers == 0:

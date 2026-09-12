@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import {
   AlertCircle,
   AlertTriangle,
@@ -37,30 +38,32 @@ import Button from '../components/Button'
 import Card from '../components/Card'
 import { api } from '../services/api'
 
-// Canonical consistent starting dataset (Section 36)
+// India-market B2B SaaS seed defaults (aligned to 2025–26 Indian SaaS benchmarks:
+// ~₹10L–₹1Cr ARR stage, CAC ₹10–25k, churn 3–5%/mo, GM 60–70%, seed cash ₹1.5–4Cr)
 const initialForm = {
-  company_name: 'FinFlow Tech',
-  industry: 'B2B FinTech SaaS',
-  stage: 'Seed / Series A',
-  current_mrr: 5000000,       // ₹50L
-  funding: 30000000,           // ₹3Cr starting cash
-  current_customers: 1000,     // 1,000 customers
-  pricing: 5000,               // ₹5,000 ARPU / month -> 1,000 * ₹5,000 = ₹50,00,000 MRR!
-  cac: 30000,                  // ₹30,000 CAC
-  marketing_spend: 1000000,    // ₹10,00,000 / month marketing
-  growth_rate: 0.40,           // 40% annual growth
-  churn: 0.03,                 // 3% monthly churn
-  starting_gross_margin: 0.75, // 75% gross margin
-  operating_expenses: 2000000, // ₹20,00,000 fixed costs
-  growth_decay_rate: 0.0,
-  months: 24,
-  investment_amount: 0,
-  equity_percentage: 0.10,
-  investment_month: 1,
+  company_name: 'Ledgerly',
+  industry: 'India-market B2B FinTech SaaS',
+  stage: 'Seed (raising pre-Series A)',
+  current_mrr: 400000, // ₹4L MRR → ₹48L ARR (strong seed / pre-A band)
+  funding: 25000000, // ₹2.5Cr cash after typical seed raise
+  current_customers: 80, // 80 logos × ₹5k ARPU = ₹4L MRR
+  pricing: 5000, // ₹5,000/mo ≈ ₹60k ACV (typical India SMB SaaS)
+  cac: 18000, // blended CAC mid-benchmark (₹10k–₹25k)
+  marketing_spend: 180000, // ≈10 paid customers / month at ₹18k CAC
+  growth_rate: 1.0, // 100% YoY (~2×) — Series A trajectory, not fairy-tale
+  churn: 0.035, // 3.5% monthly logo churn (India SMB band 3–5%)
+  starting_gross_margin: 0.68, // 68% SaaS GM (benchmark 60–70%)
+  operating_expenses: 600000, // ₹6L fixed opex (~8-person early team)
+  growth_decay_rate: 0.015, // mild deceleration of growth efficiency
+  months: 18,
+  investment_amount: 0, // off by default so Starting Cash visibly drives runway/ending cash
+  equity_percentage: 0.18,
+  investment_month: 6,
+  valuation_multiple: 10, // India seed/Series A ARR multiples ~6–12× / 8–18×
   use_historical_data: false,
-  historical_growth_rates_str: '0.08, 0.12, 0.10, 0.15, 0.07, 0.13, 0.11, 0.09',
-  historical_cac_str: '28000, 30000, 31000, 29000, 34000, 32000',
-  historical_churn_str: '0.025, 0.030, 0.028, 0.032, 0.035',
+  historical_growth_rates_str: '0.12, 0.18, 0.15, 0.20, 0.14, 0.16',
+  historical_cac_str: '16000, 18000, 19000, 17000, 21000, 18500',
+  historical_churn_str: '0.032, 0.038, 0.035, 0.040, 0.033',
 }
 
 const formatMoney = (value) => {
@@ -107,7 +110,11 @@ function MultiScenarioChart({ scenarios, metric = 'arr', title, unit = '₹' }) 
     } else if (metric === 'ending_customers') {
       startVal = s.starting_customers || 0
     } else if (metric === 'operating_profit') {
-      startVal = (forecast[0]?.gross_profit || 0) - (forecast[0]?.operating_expenses || 0)
+      // True Month-0 OP: starting MRR × margin − (fixed + marketing)
+      const margin = forecast[0]?.gross_margin ?? 0.75
+      const fixed = forecast[0]?.fixed_costs ?? 0
+      const marketing = forecast[0]?.marketing_spend ?? 0
+      startVal = (s.starting_mrr || 0) * margin - (fixed + marketing)
     } else {
       startVal = forecast[0]?.[metric] || 0
     }
@@ -136,8 +143,8 @@ function MultiScenarioChart({ scenarios, metric = 'arr', title, unit = '₹' }) 
   const range = paddedMax - paddedMin || 1
 
   const width = 800
-  const height = 280
-  const padding = { top: 20, right: 30, bottom: 35, left: 60 }
+  const height = 220
+  const padding = { top: 12, right: 24, bottom: 28, left: 56 }
   const chartWidth = width - padding.left - padding.right
   const chartHeight = height - padding.top - padding.bottom
 
@@ -159,12 +166,12 @@ function MultiScenarioChart({ scenarios, metric = 'arr', title, unit = '₹' }) 
   const activeIndex = hoveredIdx !== null ? Math.min(hoveredIdx, monthsCount) : null
 
   return (
-    <div className="relative rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
+    <div className="relative rounded-xl border border-slate-200 bg-white p-3 shadow-xs">
       {/* Header & Legends */}
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
         <div>
           <h3 className="text-sm font-bold text-slate-900">{title}</h3>
-          <p className="text-xs text-slate-500">Pure deterministic multi-scenario trajectory</p>
+          <p className="text-[11px] text-slate-500">Bull / Base / Bear from identical Month 0</p>
         </div>
 
         <div className="flex items-center gap-4 text-xs font-semibold">
@@ -196,7 +203,7 @@ function MultiScenarioChart({ scenarios, metric = 'arr', title, unit = '₹' }) 
       <div className="relative">
         <svg
           viewBox={`0 0 ${width} ${height}`}
-          className="h-64 w-full select-none overflow-visible"
+          className="h-44 w-full max-h-[36vh] select-none overflow-visible"
           onMouseMove={(e) => {
             const rect = e.currentTarget.getBoundingClientRect()
             const x = e.clientX - rect.left
@@ -359,16 +366,19 @@ function Field({ label, name, value, onChange, suffix, step = 'any', tooltip }) 
   return (
     <label className="block">
       <div className="mb-1 flex items-center justify-between">
-        <span className="text-[11px] font-semibold text-slate-600">{label}</span>
+        <span className="sim-field-label text-[11px] font-bold" style={{ color: '#0f172a' }}>
+          {label}
+        </span>
         {tooltip && (
-          <span title={tooltip} className="cursor-help text-slate-400 hover:text-slate-600">
+          <span title={tooltip} className="cursor-help" style={{ color: '#475569' }}>
             <HelpCircle className="h-3 w-3" />
           </span>
         )}
       </div>
       <div className="relative">
         <input
-          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+          className="w-full rounded-lg border px-2.5 py-1.5 text-sm font-bold outline-none transition focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
+          style={{ color: '#0f172a', background: '#ffffff', borderColor: '#94a3b8' }}
           type="number"
           name={name}
           value={value}
@@ -376,7 +386,7 @@ function Field({ label, name, value, onChange, suffix, step = 'any', tooltip }) 
           onChange={onChange}
         />
         {suffix && (
-          <span className="pointer-events-none absolute right-3 top-2 text-xs font-semibold text-slate-400">
+          <span className="pointer-events-none absolute right-3 top-2 text-xs font-bold" style={{ color: '#334155' }}>
             {suffix}
           </span>
         )}
@@ -386,6 +396,7 @@ function Field({ label, name, value, onChange, suffix, step = 'any', tooltip }) 
 }
 
 export default function SimulationPage() {
+  const location = useLocation()
   const [form, setForm] = useState(initialForm)
   const [result, setResult] = useState(null)
   const [sensitivity, setSensitivity] = useState([])
@@ -395,6 +406,10 @@ export default function SimulationPage() {
   const [activeTableScenario, setActiveTableScenario] = useState('base')
   const [advanced, setAdvanced] = useState(false)
   const [caseType, setCaseType] = useState('claimed')
+  const [thesisText, setThesisText] = useState('')
+  const [futureAnalysis, setFutureAnalysis] = useState(null)
+  const [analyzingThesis, setAnalyzingThesis] = useState(false)
+  const [thesisHydrated, setThesisHydrated] = useState(false)
 
   // Month-0 Consistency Calculation
   const reportedMRR = Number(form.current_mrr || 0)
@@ -433,11 +448,15 @@ export default function SimulationPage() {
       churn: Number(form.churn),
       starting_gross_margin: Number(form.starting_gross_margin),
       funding: Number(form.funding),
+      starting_cash: Number(form.funding),
       operating_expenses: Number(form.operating_expenses),
       marketing_spend: Number(form.marketing_spend),
       growth_rate: Number(form.growth_rate),
       growth_decay_rate: Number(form.growth_decay_rate),
       months: Number(form.months),
+      valuation_multiple: Number(form.valuation_multiple || 8),
+      // Blended engine: Bull/Base/Bear ∝ Starting MRR, Customers×ARPU, Cash; ∝ 1/CAC.
+      authoritative_mrr_basis: 'reported_mrr',
       simulation_case: caseType,
       historical_growth_rates: historicalGrowth,
       historical_cac: historicalCac,
@@ -453,20 +472,21 @@ export default function SimulationPage() {
     }
   }, [form, caseType])
 
-  const update = (event) =>
+  const update = (event) => {
+    const { name, type, checked, value } = event.target
     setForm((previous) => ({
       ...previous,
-      [event.target.name]:
-        event.target.type === 'checkbox' ? event.target.checked : event.target.value,
+      [name]: type === 'checkbox' ? checked : value,
     }))
-
-  const runSimulation = useCallback(async () => {
+  }
+  const runSimulation = useCallback(async (overridePayload) => {
     setLoading(true)
     setError(null)
     try {
+      const body = overridePayload || payload
       const [scenarioResponse, sensitivityResponse] = await Promise.all([
-        api.runSimulationScenarios(payload),
-        api.runSimulationSensitivity(payload),
+        api.runSimulationScenarios(body),
+        api.runSimulationSensitivity(body),
       ])
       setResult(scenarioResponse)
       setSensitivity(sensitivityResponse.sensitivity || [])
@@ -477,6 +497,97 @@ export default function SimulationPage() {
     }
   }, [payload])
 
+  const applyThesisResult = useCallback(
+    (res) => {
+      if (res?.simulator_form) {
+        setForm((prev) => ({ ...prev, ...res.simulator_form }))
+      } else if (res?.extracted_assumptions) {
+        const a = res.extracted_assumptions
+        setForm((prev) => ({
+          ...prev,
+          company_name: a.company_name || prev.company_name,
+          industry: a.industry || prev.industry,
+          stage: a.stage || prev.stage,
+          current_mrr: a.current_mrr ?? prev.current_mrr,
+          funding: a.funding ?? prev.funding,
+          current_customers: a.current_customers ?? prev.current_customers,
+          pricing: a.pricing ?? prev.pricing,
+          cac: a.cac ?? prev.cac,
+          churn: a.churn ?? prev.churn,
+          marketing_spend: a.marketing_spend ?? prev.marketing_spend,
+          growth_rate: a.growth_rate ?? prev.growth_rate,
+          starting_gross_margin: a.starting_gross_margin ?? prev.starting_gross_margin,
+          operating_expenses: a.operating_expenses ?? prev.operating_expenses,
+          months: a.months ?? prev.months,
+          valuation_multiple: a.valuation_multiple ?? prev.valuation_multiple,
+        }))
+      }
+      if (res?.future_analysis) setFutureAnalysis(res.future_analysis)
+      if (res?.scenarios) {
+        setResult({
+          scenarios: res.scenarios,
+          summary: res.simulation_detail?.summary || {
+            red_team_analysis: { summary: res.insights },
+          },
+          ...(res.simulation_detail || {}),
+        })
+      }
+      if (res?.sensitivity) setSensitivity(res.sensitivity)
+    },
+    [],
+  )
+
+  const analyzeThesisAndSimulate = useCallback(async () => {
+    if (!thesisText.trim()) {
+      setError('Paste a thesis before running Analyze & Simulate.')
+      return
+    }
+    setAnalyzingThesis(true)
+    setError(null)
+    try {
+      const res = await api.analyzeThesis({
+        thesis_text: thesisText,
+        pitch: form.company_name,
+        industry: form.industry,
+        funding_stage: form.stage,
+        company_name: form.company_name,
+        amount: form.funding,
+        run_full_simulation: true,
+      })
+      applyThesisResult(res)
+      // Recalculate with hydrated drivers so charts match editable form
+      if (res?.simulator_form) {
+        const next = { ...form, ...res.simulator_form }
+        const body = {
+          company_name: next.company_name,
+          industry: next.industry,
+          stage: next.stage,
+          current_mrr: Number(next.current_mrr),
+          current_customers: Number(next.current_customers),
+          pricing: Number(next.pricing),
+          cac: Number(next.cac),
+          churn: Number(next.churn),
+          starting_gross_margin: Number(next.starting_gross_margin),
+          funding: Number(next.funding),
+          starting_cash: Number(next.funding),
+          operating_expenses: Number(next.operating_expenses),
+          marketing_spend: Number(next.marketing_spend),
+          growth_rate: Number(next.growth_rate),
+          growth_decay_rate: Number(next.growth_decay_rate || 0.015),
+          months: Number(next.months),
+          valuation_multiple: Number(next.valuation_multiple || 8),
+          authoritative_mrr_basis: 'reported_mrr',
+          simulation_case: caseType,
+        }
+        await runSimulation(body)
+      }
+    } catch (err) {
+      setError(err.message || 'Thesis analysis failed.')
+    } finally {
+      setAnalyzingThesis(false)
+    }
+  }, [thesisText, form, caseType, applyThesisResult, runSimulation])
+
   // Debounced auto-recalculation when inputs change
   useEffect(() => {
     if (!result) return undefined
@@ -486,7 +597,32 @@ export default function SimulationPage() {
     return () => window.clearTimeout(timer)
   }, [payload]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Hydrate from create-deal / deep-link state once
   useEffect(() => {
+    const state = location.state
+    if (!state || thesisHydrated) return
+    setThesisHydrated(true)
+    if (state.thesis) setThesisText(state.thesis)
+    if (state.futureAnalysis) setFutureAnalysis(state.futureAnalysis)
+    if (state.assumptions || state.simulatorForm || state.aiReport) {
+      const pack = state.aiReport || {
+        simulator_form: state.simulatorForm,
+        extracted_assumptions: state.assumptions,
+        future_analysis: state.futureAnalysis,
+        scenarios: state.scenarios,
+        sensitivity: state.sensitivity,
+        simulation_detail: state.simulationDetail,
+        insights: state.insights,
+      }
+      applyThesisResult(pack)
+    }
+    // Initial run after short delay so form state commits
+    const t = window.setTimeout(() => runSimulation(), 50)
+    return () => window.clearTimeout(t)
+  }, [location.state, thesisHydrated, applyThesisResult, runSimulation])
+
+  useEffect(() => {
+    if (location.state?.fromThesis) return
     runSimulation()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -497,605 +633,395 @@ export default function SimulationPage() {
   const redTeam = result?.summary?.red_team_analysis
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 pb-12">
-      {/* Header Banner */}
-      <div className="rounded-2xl bg-gradient-to-r from-[#0c2a21] via-[#104334] to-[#175c46] p-6 text-white shadow-xl">
-        <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
-          <div>
-            <div className="mb-2 flex items-center gap-2 text-emerald-300">
-              <FlaskConical className="h-5 w-5" />
-              <span className="text-xs font-bold uppercase tracking-wider">
-                Audited Deterministic Financial Engine · v2.0.0
+    <div className="flex h-full min-h-0 flex-col gap-2 overflow-hidden">
+      <div className="shrink-0 rounded-xl bg-gradient-to-r from-[#0c2a21] via-[#104334] to-[#175c46] px-4 py-3 text-white shadow-md">
+        <div className="flex flex-col justify-between gap-2 md:flex-row md:items-center">
+          <div className="min-w-0">
+            <div className="mb-0.5 flex flex-wrap items-center gap-2 text-emerald-300">
+              <FlaskConical className="h-4 w-4 shrink-0" />
+              <span className="text-[10px] font-bold uppercase tracking-wider">
+                Deterministic Engine · India SaaS benchmarks
               </span>
             </div>
-            <h1 className="text-2xl font-black md:text-3xl">Startup Financial Scenario Engine</h1>
-            <p className="mt-2 max-w-2xl text-sm text-emerald-100/90">
-              Mathematically unified revenue model (MRR = Customers × ARPU) driving P&L, monthly cashflows, Bull/Base/Bear scenarios, and sensitivity rankings.
+            <h1 className="truncate text-lg font-black md:text-xl">Financial Scenario Simulator</h1>
+            <p className="mt-0.5 max-w-3xl text-[11px] leading-snug text-emerald-100/85">
+              Defaults mirror India-market B2B SaaS seed economics (≈₹48L ARR, CAC ₹10–25k, churn 3–5%/mo, GM 60–70%).
+              Starting MRR and Cash are independent inputs · Bull/Base/Bear share Month 0.
             </p>
           </div>
-
-          <div className="flex items-center gap-3">
-            <Button
-              onClick={runSimulation}
-              disabled={loading}
-              className="bg-amber-400 font-bold text-slate-950 shadow-md hover:bg-amber-300"
-            >
-              {loading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-              {loading ? 'Evaluating Model…' : 'Recalculate Model'}
-            </Button>
-          </div>
+          <Button
+            onClick={() => runSimulation()}
+            disabled={loading || analyzingThesis}
+            className="shrink-0 bg-amber-400 font-bold text-slate-950 shadow-md hover:bg-amber-300"
+          >
+            {loading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+            {loading ? 'Running…' : 'Recalculate'}
+          </Button>
         </div>
       </div>
 
-      {/* Critical Input Inconsistency Banner (Section 2 & 24) */}
       {hasInconsistency && (
-        <div className="rounded-2xl border-2 border-rose-500 bg-rose-50 p-5 text-rose-950 shadow-md">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div className="flex items-start gap-3">
-              <AlertCircle className="h-6 w-6 text-rose-600 shrink-0 mt-0.5" />
-              <div>
-                <h3 className="text-sm font-extrabold text-rose-900 uppercase tracking-wide">
-                  Critical Input Inconsistency Detected
-                </h3>
-                <p className="mt-1 text-xs text-rose-800 leading-relaxed font-medium">
-                  Starting MRR (<strong>{formatMoney(reportedMRR)}</strong>) does not reconcile with Customers ({formatNumber(customersCount)}) × ARPU ({formatMoney(arpuValue)}) = <strong>{formatMoney(impliedMRR)}</strong> (Discrepancy: <strong>{discrepancyPct.toFixed(1)}%</strong>). The simulation engine requires coherent baseline numbers.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2 shrink-0">
+        <div className="shrink-0 rounded-xl border border-rose-400 bg-rose-50 px-3 py-2 text-rose-950">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-[11px] font-semibold leading-snug">
+              MRR {formatMoney(reportedMRR)} ≠ Customers × ARPU {formatMoney(impliedMRR)} ({discrepancyPct.toFixed(1)}%).
+            </p>
+            <div className="flex gap-2">
               <button
+                type="button"
                 onClick={() => setForm((prev) => ({ ...prev, current_mrr: impliedMRR }))}
-                className="flex items-center gap-1.5 rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-rose-700 transition"
+                className="rounded-lg bg-rose-600 px-2.5 py-1 text-[10px] font-bold text-white"
               >
-                <Wrench className="h-3.5 w-3.5" />
-                <span>Use Customers × ARPU ({formatMoney(impliedMRR)})</span>
+                Use × ARPU
               </button>
               <button
-                onClick={() => setForm((prev) => ({ ...prev, pricing: customersCount > 0 ? reportedMRR / customersCount : prev.pricing }))}
-                className="flex items-center gap-1.5 rounded-lg bg-white border border-rose-300 px-3 py-1.5 text-xs font-bold text-rose-800 shadow-xs hover:bg-rose-100 transition"
+                type="button"
+                onClick={() =>
+                  setForm((prev) => ({
+                    ...prev,
+                    pricing: customersCount > 0 ? reportedMRR / customersCount : prev.pricing,
+                  }))
+                }
+                className="rounded-lg border border-rose-300 bg-white px-2.5 py-1 text-[10px] font-bold text-rose-800"
               >
-                <span>Adjust ARPU ({formatMoney(customersCount > 0 ? reportedMRR / customersCount : 0)})</span>
+                Adjust ARPU
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Main Grid: Inputs Form Left vs Graphs & Outputs Right */}
-      <div className="grid gap-6 xl:grid-cols-[380px_1fr]">
-        {/* Left Column: Model Parameters Form */}
-        <div className="space-y-4">
-          <Card
-            title="Core Operating Drivers"
-            subtitle="Verified startup inputs (All internal math in raw INR)"
-            hover={false}
-          >
-            <div className="space-y-4">
+      <div className="grid min-h-0 flex-1 gap-3 xl:grid-cols-[300px_minmax(0,1fr)]">
+        <div className="min-h-0 space-y-3 overflow-y-auto overscroll-contain pr-1">
+          <section className="sim-drivers-panel p-4">
+            <div className="mb-3 border-b border-slate-200 pb-2">
+              <h2 className="text-base font-bold" style={{ color: '#0f172a' }}>
+                Thesis → Future Analysis
+              </h2>
+              <p className="sim-panel-subtitle mt-0.5 text-xs font-semibold" style={{ color: '#334155' }}>
+                ADK / Gemini extracts drivers; Python simulates
+              </p>
+            </div>
+            <textarea
+              value={thesisText}
+              onChange={(e) => setThesisText(e.target.value)}
+              rows={5}
+              placeholder="Paste investment thesis here, then Analyze & Simulate…"
+              className="mb-2 w-full rounded-lg border px-2.5 py-2 text-xs font-medium outline-none focus:border-emerald-600"
+              style={{ color: '#0f172a', background: '#ffffff', borderColor: '#94a3b8' }}
+            />
+            <button
+              type="button"
+              onClick={analyzeThesisAndSimulate}
+              disabled={analyzingThesis || loading}
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-700 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-800 disabled:opacity-50"
+            >
+              {analyzingThesis ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <FlaskConical className="h-3.5 w-3.5" />}
+              {analyzingThesis ? 'Analyzing thesis…' : 'Analyze & Simulate'}
+            </button>
+          </section>
+
+          <section className="sim-drivers-panel p-4">
+            <div className="mb-3 border-b border-slate-200 pb-2">
+              <h2 className="text-base font-bold" style={{ color: '#0f172a' }}>
+                Operating Drivers
+              </h2>
+              <p className="sim-panel-subtitle mt-0.5 text-xs font-semibold" style={{ color: '#334155' }}>
+                India seed-stage defaults · raw INR
+              </p>
+            </div>
+            <div className="space-y-3">
               <label className="block">
-                <span className="mb-1 block text-[11px] font-semibold text-slate-600">
+                <span className="sim-field-label mb-1 block text-[11px] font-bold" style={{ color: '#0f172a' }}>
                   Company Name
                 </span>
                 <input
                   name="company_name"
                   value={form.company_name}
                   onChange={update}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-900 outline-none focus:border-emerald-500"
+                  className="w-full rounded-lg border px-2.5 py-1.5 text-sm font-bold outline-none focus:border-emerald-600"
+                  style={{ color: '#0f172a', background: '#ffffff', borderColor: '#94a3b8' }}
                 />
               </label>
 
-              {/* 10 Canonical Parameters */}
-              <div className="grid grid-cols-2 gap-3">
-                <Field
-                  label="Starting MRR (M₀)"
-                  name="current_mrr"
-                  value={form.current_mrr}
-                  onChange={update}
-                  suffix="₹"
-                  tooltip="User-supplied starting monthly recurring revenue"
-                />
-                <Field
-                  label="Starting Cash (C₀)"
-                  name="funding"
-                  value={form.funding}
-                  onChange={update}
-                  suffix="₹"
-                  tooltip="Starting liquid cash reserves at Month 0"
-                />
-                <Field
-                  label="Customers (N₀)"
-                  name="current_customers"
-                  value={form.current_customers}
-                  onChange={update}
-                  tooltip="Total active paying customer count at Month 0"
-                />
-                <Field
-                  label="ARPU / month (A₀)"
-                  name="pricing"
-                  value={form.pricing}
-                  onChange={update}
-                  suffix="₹"
-                  tooltip="Average Revenue Per User per month"
-                />
-                <Field
-                  label="CAC (K₀)"
-                  name="cac"
-                  value={form.cac}
-                  onChange={update}
-                  suffix="₹"
-                  tooltip="Customer Acquisition Cost"
-                />
-                <Field
-                  label="Marketing / mo (P₀)"
-                  name="marketing_spend"
-                  value={form.marketing_spend}
-                  onChange={update}
-                  suffix="₹"
-                  tooltip="Monthly marketing acquisition budget"
-                />
+              <div className="grid grid-cols-2 gap-2">
+                <Field label="Starting MRR" name="current_mrr" value={form.current_mrr} onChange={update} suffix="₹" tooltip="Month-0 recurring revenue (independent of Customers × ARPU)" />
+                <Field label="Starting Cash" name="funding" value={form.funding} onChange={update} suffix="₹" tooltip="Liquid cash at Month 0 (never overwritten)" />
+                <Field label="Customers" name="current_customers" value={form.current_customers} onChange={update} tooltip="Paying logos at Month 0" />
+                <Field label="ARPU / mo" name="pricing" value={form.pricing} onChange={update} suffix="₹" tooltip="Avg revenue per customer / month" />
+                <Field label="CAC" name="cac" value={form.cac} onChange={update} suffix="₹" tooltip="Blended customer acquisition cost" />
+                <Field label="Marketing / mo" name="marketing_spend" value={form.marketing_spend} onChange={update} suffix="₹" tooltip="Monthly acquisition budget" />
               </div>
 
-              {/* Growth, Churn, Margin, Fixed Costs */}
-              <div className="grid grid-cols-2 gap-3 border-t border-slate-100 pt-3">
+              <div className="grid grid-cols-2 gap-2 border-t border-slate-200 pt-2">
                 <div>
                   <Field
-                    label="Annual Growth (gₐ)"
+                    label="Claimed YoY Growth"
                     name="growth_rate"
                     value={form.growth_rate}
                     onChange={update}
-                    step="0.01"
+                    step="0.05"
                     suffix="dec"
-                    tooltip="Target annual organic growth reference"
+                    tooltip="Converted to monthly organic adds: (1+g)^(1/12)−1"
                   />
-                  <div className="mt-1 flex items-center gap-1 text-[10px] font-bold text-emerald-700">
-                    <Zap className="h-3 w-3" />
-                    <span>gₘ ≈ {(monthlyGrowthEquivalent * 100).toFixed(2)}%/mo</span>
+                  <div className="mt-0.5 text-[10px] font-bold text-emerald-800">
+                    gₘ ≈ {(monthlyGrowthEquivalent * 100).toFixed(2)}%/mo
                   </div>
+                  {base?.simulated_annual_growth != null && (
+                    <div className="text-[10px] font-bold text-black/70">
+                      Sim. CAGR: {(Number(base.simulated_annual_growth) * 100).toFixed(0)}%
+                    </div>
+                  )}
                 </div>
-
-                <Field
-                  label="Monthly Churn (c)"
-                  name="churn"
-                  value={form.churn}
-                  onChange={update}
-                  suffix="dec"
-                  step="0.005"
-                  tooltip="Monthly customer attrition rate"
-                />
-                <Field
-                  label="Gross Margin (G)"
-                  name="starting_gross_margin"
-                  value={form.starting_gross_margin}
-                  onChange={update}
-                  suffix="dec"
-                  step="0.01"
-                  tooltip="Gross profit margin on revenue"
-                />
-                <Field
-                  label="Fixed Costs (F)"
-                  name="operating_expenses"
-                  value={form.operating_expenses}
-                  onChange={update}
-                  suffix="₹"
-                  tooltip="Monthly fixed operating overhead"
-                />
+                <Field label="Monthly Churn" name="churn" value={form.churn} onChange={update} suffix="dec" step="0.005" tooltip="India SMB SaaS often 3–5%/mo" />
+                <Field label="Gross Margin" name="starting_gross_margin" value={form.starting_gross_margin} onChange={update} suffix="dec" step="0.01" />
+                <Field label="Fixed Costs" name="operating_expenses" value={form.operating_expenses} onChange={update} suffix="₹" />
               </div>
 
-              {/* Historical Volatility Override */}
-              <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-3">
-                <label className="flex items-center justify-between text-xs font-bold text-emerald-900">
-                  <span>Historical Data Volatility (Mean ± σ)</span>
-                  <input
-                    type="checkbox"
-                    name="use_historical_data"
-                    checked={form.use_historical_data}
-                    onChange={update}
-                    className="h-4 w-4 rounded border-emerald-300 text-emerald-600 focus:ring-emerald-500"
-                  />
-                </label>
-                <p className="mt-1 text-[10px] text-emerald-700">
-                  Derive Bull/Base/Bear dynamically from historical standard deviation instead of benchmark multipliers.
-                </p>
+              <p
+                className="rounded-lg px-2.5 py-1.5 text-[10px] font-semibold leading-snug"
+                style={{ background: '#ecfdf5', color: '#0f172a' }}
+              >
+                Bull / Base / Bear move with Starting MRR, Starting Cash, and Customers; higher CAC reduces paid acquisition.
+                Form fields are not auto-overwritten. Leave Round Size at ₹0 unless you model a raise.
+              </p>
+              <p
+                className="rounded-lg px-2.5 py-1.5 text-[10px] font-semibold leading-snug"
+                style={{ background: '#f1f5f9', color: '#0f172a' }}
+              >
+                Benchmarks: India B2B SaaS seed ≈ ₹10L–₹1Cr ARR · CAC ₹10–25k · churn 3–5% · GM 60–70% · seed cash ₹1.5–4Cr.
+              </p>
 
-                {form.use_historical_data && (
-                  <div className="mt-3 space-y-2 border-t border-emerald-200/60 pt-2">
-                    <label className="block text-[10px] font-semibold text-slate-700">
-                      Historical Growth Rates (CSV):
-                      <input
-                        name="historical_growth_rates_str"
-                        value={form.historical_growth_rates_str}
-                        onChange={update}
-                        className="mt-0.5 w-full rounded border border-slate-300 bg-white p-1.5 text-xs"
-                      />
-                    </label>
-                    <label className="block text-[10px] font-semibold text-slate-700">
-                      Historical CAC Series (₹ CSV):
-                      <input
-                        name="historical_cac_str"
-                        value={form.historical_cac_str}
-                        onChange={update}
-                        className="mt-0.5 w-full rounded border border-slate-300 bg-white p-1.5 text-xs"
-                      />
-                    </label>
-                    <label className="block text-[10px] font-semibold text-slate-700">
-                      Historical Churn Series (CSV):
-                      <input
-                        name="historical_churn_str"
-                        value={form.historical_churn_str}
-                        onChange={update}
-                        className="mt-0.5 w-full rounded border border-slate-300 bg-white p-1.5 text-xs"
-                      />
-                    </label>
-                  </div>
-                )}
-              </div>
-
-              {/* Horizon & Financing Controls */}
               <button
                 type="button"
                 onClick={() => setAdvanced(!advanced)}
-                className="flex w-full items-center justify-between border-t border-slate-100 pt-3 text-xs font-bold text-emerald-700"
+                className="flex w-full items-center justify-between border-t border-slate-200 pt-2 text-xs font-bold"
+                style={{ color: '#065f46' }}
               >
-                <span>Forecast Horizon & Financing Round</span>
+                <span>Horizon & Financing</span>
                 <ChevronDown className={`h-4 w-4 transition ${advanced ? 'rotate-180' : ''}`} />
               </button>
 
               {advanced && (
-                <div className="space-y-3 rounded-xl bg-slate-50 p-3">
-                  <div className="grid grid-cols-2 gap-3">
-                    <Field
-                      label="Forecast Horizon"
-                      name="months"
-                      value={form.months}
-                      onChange={update}
-                      suffix="mo"
-                      step="12"
-                    />
-                    <Field
-                      label="Growth Decay"
-                      name="growth_decay_rate"
-                      value={form.growth_decay_rate}
-                      onChange={update}
-                      step="0.01"
-                    />
+                <div className="space-y-2 rounded-xl border border-slate-200 p-2.5" style={{ background: '#f8fafc' }}>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Field label="Horizon" name="months" value={form.months} onChange={update} suffix="mo" step="1" />
+                    <Field label="Growth Decay" name="growth_decay_rate" value={form.growth_decay_rate} onChange={update} step="0.005" />
+                    <Field label="Round Size" name="investment_amount" value={form.investment_amount} onChange={update} suffix="₹" />
+                    <Field label="Equity" name="equity_percentage" value={form.equity_percentage} onChange={update} step="0.01" />
+                    <Field label="Invest Month" name="investment_month" value={form.investment_month} onChange={update} step="1" suffix="mo" />
+                    <Field label="ARR Multiple" name="valuation_multiple" value={form.valuation_multiple ?? 10} onChange={update} step="0.5" />
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <Field
-                      label="Round Investment"
-                      name="investment_amount"
-                      value={form.investment_amount}
-                      onChange={update}
-                      suffix="₹"
-                    />
-                    <Field
-                      label="Equity Share"
-                      name="equity_percentage"
-                      value={form.equity_percentage}
-                      onChange={update}
-                      step="0.01"
-                    />
-                  </div>
-                  <label className="flex items-center justify-between text-xs font-semibold text-slate-600">
+                  <label className="flex items-center justify-between text-xs font-bold" style={{ color: '#0f172a' }}>
                     Input Mode
                     <select
                       value={caseType}
                       onChange={(e) => setCaseType(e.target.value)}
-                      className="rounded border border-slate-200 bg-white px-2 py-1 text-slate-700"
+                      className="rounded border px-2 py-1 font-bold"
+                      style={{ color: '#0f172a', background: '#ffffff', borderColor: '#94a3b8' }}
                     >
-                      <option value="claimed">Claimed Data Scenario</option>
-                      <option value="verified">Verified Data Scenario</option>
+                      <option value="claimed">Claimed</option>
+                      <option value="verified">Verified</option>
                     </select>
                   </label>
                 </div>
               )}
             </div>
-          </Card>
-
-          {/* Mathematical Invariant Card */}
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-600 space-y-2">
-            <div className="flex items-center gap-1.5 font-bold text-slate-800">
-              <Scale className="h-4 w-4 text-emerald-600" />
-              <span>Unified Mathematical Invariants</span>
-            </div>
-            <ul className="list-disc pl-4 space-y-1 text-[11px] leading-relaxed">
-              <li><strong>MRRₜ:</strong> Ending Customersₜ × ARPUₜ</li>
-              <li><strong>ARRₜ:</strong> MRRₜ × 12</li>
-              <li><strong>New Customersₜ:</strong> Marketingₜ / CACₜ</li>
-              <li><strong>Churned Customersₜ:</strong> Starting Customersₜ × Churnₜ</li>
-              <li><strong>Gross Profitₜ:</strong> MRRₜ × Gross Marginₜ</li>
-              <li><strong>Operating Profitₜ:</strong> Gross Profitₜ - OPEXₜ</li>
-              <li><strong>Ending Cashₜ:</strong> Starting Cashₜ + Operating Profitₜ + Financingₜ</li>
-            </ul>
-          </div>
+          </section>
         </div>
 
-        {/* Right Column: Scenario Evaluations, Graphs & Tables */}
-        <div className="space-y-6">
+        <div className="flex min-h-0 min-w-0 flex-col gap-2 overflow-hidden">
           {error && (
-            <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700 flex items-center gap-2">
+            <div className="flex shrink-0 items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
               <AlertTriangle className="h-5 w-5 shrink-0" />
               <span>{error}</span>
             </div>
           )}
 
-          {loading && (
-            <div className="flex min-h-80 flex-col items-center justify-center rounded-2xl bg-white p-8 text-center shadow-xs">
+          {loading && !result && (
+            <div className="flex min-h-0 flex-1 flex-col items-center justify-center rounded-2xl bg-white p-8 text-center shadow-xs">
               <LoaderCircle className="h-8 w-8 animate-spin text-emerald-600" />
-              <p className="mt-3 text-sm font-bold text-slate-800">Evaluating Deterministic Simulation…</p>
-              <p className="text-xs text-slate-500">Calculating monthly cohorts, unit economics & runway dynamics.</p>
+              <p className="mt-3 text-sm font-bold text-slate-800">Running simulation…</p>
             </div>
           )}
 
-          {result && !loading && (
-            <>
-              {/* Scenario Summary Cards (Section 30 & 31) */}
-              <div className="grid gap-4 md:grid-cols-3">
-                {/* BULL CARD */}
+          {result && (
+            <div className={`min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain pr-1 pb-3 ${loading ? 'opacity-60' : ''}`}>
+              <div className="grid gap-2 md:grid-cols-3">
                 {bull && (
-                  <div className="relative overflow-hidden rounded-2xl border-2 border-emerald-500/30 bg-gradient-to-b from-emerald-500/10 to-white p-5 shadow-sm">
-                    <div className="flex items-center justify-between">
-                      <span className="flex items-center gap-1.5 rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-black uppercase tracking-wider text-emerald-800">
-                        <Rocket className="h-3.5 w-3.5" /> Bull Case
+                  <div className="rounded-xl border border-emerald-500/30 bg-gradient-to-b from-emerald-500/10 to-white p-3">
+                    <div className="mb-2 flex items-center justify-between">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-black uppercase text-emerald-800">
+                        <Rocket className="h-3 w-3" /> Bull
                       </span>
-                      <span className="text-[10px] font-bold text-emerald-700">Upside Scenario</span>
+                      <span className="text-[10px] font-bold text-emerald-700">{bull.runway_display}</span>
                     </div>
-
-                    <div className="mt-4 space-y-3">
+                    <p className="text-[10px] text-slate-500">{form.months}M Ending ARR</p>
+                    <p className="text-xl font-black text-slate-900">{formatMoney(bull.ending_arr)}</p>
+                    <div className="mt-2 grid grid-cols-2 gap-1 text-[10px]">
                       <div>
-                        <p className="text-[11px] font-medium text-slate-500">{form.months}M Ending ARR</p>
-                        <p className="text-2xl font-black text-slate-900">{formatMoney(bull.ending_arr)}</p>
-                        <p className="text-[10px] text-slate-500">Ending MRR: {formatMoney(bull.ending_mrr)}</p>
+                        <span className="text-slate-500">Cash</span>
+                        <p className={`font-bold ${bull.ending_cash < 0 ? 'text-rose-600' : 'text-slate-800'}`}>{formatMoney(bull.ending_cash)}</p>
                       </div>
-
-                      <div className="grid grid-cols-2 gap-2 border-t border-emerald-100 pt-2 text-xs">
-                        <div>
-                          <span className="text-slate-500">Break-even</span>
-                          <p className="font-bold text-slate-800">
-                            {bull.break_even_month !== null ? (bull.break_even_month === 0 ? 'Month 0' : `Month ${bull.break_even_month}`) : 'Not reached'}
-                          </p>
-                        </div>
-                        <div>
-                          <span className="text-slate-500">Runway</span>
-                          <p className="font-bold text-emerald-700">{bull.runway_display}</p>
-                        </div>
-                        <div>
-                          <span className="text-slate-500">Ending Cash</span>
-                          <p className="font-bold text-slate-800">{formatMoney(bull.ending_cash)}</p>
-                        </div>
-                        <div>
-                          <span className="text-slate-500">Ending Users</span>
-                          <p className="font-bold text-slate-800">{formatNumber(bull.ending_customers)}</p>
-                        </div>
-                      </div>
-
-                      {/* Bull Scenario Assumptions Breakdown */}
-                      <div className="rounded-lg bg-emerald-50/80 p-2.5 text-[10px] text-slate-700 space-y-1">
-                        <div className="font-bold text-emerald-900 uppercase">Bull Assumptions:</div>
-                        <div className="grid grid-cols-2 gap-1 text-[10px]">
-                          <span>CAC: {formatMoney(bull.unit_economics?.cac)}</span>
-                          <span>Churn: {formatPercent(bull.unit_economics?.churn)}</span>
-                          <span>ARPU: {formatMoney(bull.unit_economics?.arpu)}</span>
-                          <span>Margin: {formatPercent(bull.unit_economics?.gross_margin)}</span>
-                        </div>
+                      <div>
+                        <span className="text-slate-500">Customers</span>
+                        <p className="font-bold text-slate-800">{formatNumber(bull.ending_customers)}</p>
                       </div>
                     </div>
                   </div>
                 )}
-
-                {/* BASE CARD */}
                 {base && (
-                  <div className="relative overflow-hidden rounded-2xl border-2 border-sky-500/30 bg-gradient-to-b from-sky-500/10 to-white p-5 shadow-sm">
-                    <div className="flex items-center justify-between">
-                      <span className="flex items-center gap-1.5 rounded-full bg-sky-100 px-2.5 py-1 text-[11px] font-black uppercase tracking-wider text-sky-800">
-                        <Scale className="h-3.5 w-3.5" /> Base Case
+                  <div className="rounded-xl border border-sky-500/30 bg-gradient-to-b from-sky-500/10 to-white p-3">
+                    <div className="mb-2 flex items-center justify-between">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-black uppercase text-sky-800">
+                        <Scale className="h-3 w-3" /> Base
                       </span>
-                      <span className="text-[10px] font-bold text-sky-700">Expected Plan</span>
+                      <span className="text-[10px] font-bold text-sky-700">{base.runway_display}</span>
                     </div>
-
-                    <div className="mt-4 space-y-3">
+                    <p className="text-[10px] text-slate-500">{form.months}M Ending ARR</p>
+                    <p className="text-xl font-black text-slate-900">{formatMoney(base.ending_arr)}</p>
+                    <div className="mt-2 grid grid-cols-2 gap-1 text-[10px]">
                       <div>
-                        <p className="text-[11px] font-medium text-slate-500">{form.months}M Ending ARR</p>
-                        <p className="text-2xl font-black text-slate-900">{formatMoney(base.ending_arr)}</p>
-                        <p className="text-[10px] text-slate-500">Ending MRR: {formatMoney(base.ending_mrr)}</p>
+                        <span className="text-slate-500">Cash</span>
+                        <p className={`font-bold ${base.ending_cash < 0 ? 'text-rose-600' : 'text-slate-800'}`}>{formatMoney(base.ending_cash)}</p>
                       </div>
-
-                      <div className="grid grid-cols-2 gap-2 border-t border-sky-100 pt-2 text-xs">
-                        <div>
-                          <span className="text-slate-500">Break-even</span>
-                          <p className="font-bold text-slate-800">
-                            {base.break_even_month !== null ? (base.break_even_month === 0 ? 'Month 0' : `Month ${base.break_even_month}`) : 'Not reached'}
-                          </p>
-                        </div>
-                        <div>
-                          <span className="text-slate-500">Runway</span>
-                          <p className="font-bold text-sky-700">{base.runway_display}</p>
-                        </div>
-                        <div>
-                          <span className="text-slate-500">Ending Cash</span>
-                          <p className={`font-bold ${base.ending_cash < 0 ? 'text-rose-600' : 'text-slate-800'}`}>
-                            {formatMoney(base.ending_cash)}
-                          </p>
-                        </div>
-                        <div>
-                          <span className="text-slate-500">Capital Need</span>
-                          <p className="font-bold text-slate-800">
-                            {base.additional_capital_required > 0 ? formatMoney(base.additional_capital_required) : '₹0'}
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* Base Scenario Assumptions Breakdown */}
-                      <div className="rounded-lg bg-sky-50/80 p-2.5 text-[10px] text-slate-700 space-y-1">
-                        <div className="font-bold text-sky-900 uppercase">Base Assumptions:</div>
-                        <div className="grid grid-cols-2 gap-1 text-[10px]">
-                          <span>CAC: {formatMoney(base.unit_economics?.cac)}</span>
-                          <span>Churn: {formatPercent(base.unit_economics?.churn)}</span>
-                          <span>ARPU: {formatMoney(base.unit_economics?.arpu)}</span>
-                          <span>Margin: {formatPercent(base.unit_economics?.gross_margin)}</span>
-                        </div>
+                      <div>
+                        <span className="text-slate-500">Customers</span>
+                        <p className="font-bold text-slate-800">{formatNumber(base.ending_customers)}</p>
                       </div>
                     </div>
                   </div>
                 )}
-
-                {/* BEAR CARD */}
                 {bear && (
-                  <div className="relative overflow-hidden rounded-2xl border-2 border-rose-500/30 bg-gradient-to-b from-rose-500/10 to-white p-5 shadow-sm">
-                    <div className="flex items-center justify-between">
-                      <span className="flex items-center gap-1.5 rounded-full bg-rose-100 px-2.5 py-1 text-[11px] font-black uppercase tracking-wider text-rose-800">
-                        <Flame className="h-3.5 w-3.5" /> Bear Case
+                  <div className="rounded-xl border border-rose-500/30 bg-gradient-to-b from-rose-500/10 to-white p-3">
+                    <div className="mb-2 flex items-center justify-between">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-black uppercase text-rose-800">
+                        <TrendingDown className="h-3 w-3" /> Bear
                       </span>
-                      <span className="text-[10px] font-bold text-rose-700">Downside Stress</span>
+                      <span className="text-[10px] font-bold text-rose-700">{bear.runway_display}</span>
                     </div>
-
-                    <div className="mt-4 space-y-3">
+                    <p className="text-[10px] text-slate-500">{form.months}M Ending ARR</p>
+                    <p className="text-xl font-black text-slate-900">{formatMoney(bear.ending_arr)}</p>
+                    <div className="mt-2 grid grid-cols-2 gap-1 text-[10px]">
                       <div>
-                        <p className="text-[11px] font-medium text-slate-500">{form.months}M Ending ARR</p>
-                        <p className="text-2xl font-black text-slate-900">{formatMoney(bear.ending_arr)}</p>
-                        <p className="text-[10px] text-slate-500">Ending MRR: {formatMoney(bear.ending_mrr)}</p>
+                        <span className="text-slate-500">Cash</span>
+                        <p className={`font-bold ${bear.ending_cash < 0 ? 'text-rose-600' : 'text-slate-800'}`}>{formatMoney(bear.ending_cash)}</p>
                       </div>
-
-                      <div className="grid grid-cols-2 gap-2 border-t border-rose-100 pt-2 text-xs">
-                        <div>
-                          <span className="text-slate-500">Break-even</span>
-                          <p className="font-bold text-slate-800">
-                            {bear.break_even_month !== null ? (bear.break_even_month === 0 ? 'Month 0' : `Month ${bear.break_even_month}`) : 'Not reached'}
-                          </p>
-                        </div>
-                        <div>
-                          <span className="text-slate-500">Runway</span>
-                          <p className="font-bold text-rose-700">{bear.runway_display}</p>
-                        </div>
-                        <div>
-                          <span className="text-slate-500">Ending Cash</span>
-                          <p className={`font-bold ${bear.ending_cash < 0 ? 'text-rose-600' : 'text-slate-800'}`}>
-                            {formatMoney(bear.ending_cash)}
-                          </p>
-                        </div>
-                        <div>
-                          <span className="text-slate-500">Capital Need</span>
-                          <p className="font-bold text-rose-700">
-                            {bear.additional_capital_required > 0 ? formatMoney(bear.additional_capital_required) : '₹0'}
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* Bear Scenario Assumptions Breakdown */}
-                      <div className="rounded-lg bg-rose-50/80 p-2.5 text-[10px] text-slate-700 space-y-1">
-                        <div className="font-bold text-rose-900 uppercase">Bear Assumptions:</div>
-                        <div className="grid grid-cols-2 gap-1 text-[10px]">
-                          <span>CAC: {formatMoney(bear.unit_economics?.cac)}</span>
-                          <span>Churn: {formatPercent(bear.unit_economics?.churn)}</span>
-                          <span>ARPU: {formatMoney(bear.unit_economics?.arpu)}</span>
-                          <span>Margin: {formatPercent(bear.unit_economics?.gross_margin)}</span>
-                        </div>
+                      <div>
+                        <span className="text-slate-500">Customers</span>
+                        <p className="font-bold text-slate-800">{formatNumber(bear.ending_customers)}</p>
                       </div>
                     </div>
                   </div>
                 )}
               </div>
 
-              {/* AI Red Team & Stress-Test Panel (Section 32) */}
-              <div className="rounded-2xl border border-amber-200/80 bg-gradient-to-r from-amber-50/80 via-orange-50/50 to-amber-50/80 p-5 shadow-xs">
-                <div className="flex items-start gap-3">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-slate-950 font-black shadow-xs">
-                    <ShieldAlert className="h-5 w-5" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <div className="flex items-center gap-2">
-                      <h4 className="text-sm font-extrabold text-amber-950">
-                        AI Red Team & Solvency Vulnerability Analysis
-                      </h4>
-                      <span className="rounded-md bg-amber-200 px-2 py-0.5 text-[10px] font-bold text-amber-900">
-                        Stress Evaluation
+              {futureAnalysis && (
+                <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
+                  <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-2">
+                    <h3 className="text-sm font-black text-slate-900">Thesis Future Analysis</h3>
+                    {futureAnalysis.feasibility?.score != null && (
+                      <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-black text-emerald-800">
+                        Feasibility {futureAnalysis.feasibility.score}/100 · {futureAnalysis.feasibility.grade}
                       </span>
+                    )}
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+                      <p className="mb-1 text-[10px] font-black uppercase tracking-wide text-slate-500">Competition</p>
+                      <p className="text-xs leading-relaxed text-slate-800">{futureAnalysis.competition?.summary || '—'}</p>
+                      {futureAnalysis.competition?.moat && (
+                        <p className="mt-2 text-[11px] font-semibold text-emerald-900">Moat: {futureAnalysis.competition.moat}</p>
+                      )}
+                      {(futureAnalysis.competition?.competitors || []).length > 0 && (
+                        <ul className="mt-2 list-disc pl-4 text-[11px] text-slate-600">
+                          {futureAnalysis.competition.competitors.map((c) => (
+                            <li key={c}>{c}</li>
+                          ))}
+                        </ul>
+                      )}
                     </div>
-                    <p className="text-xs text-amber-900/90 leading-relaxed font-medium">
-                      {redTeam?.summary ||
-                        `The startup's outcome is highly sensitive to CAC and churn. Under Bear headwinds, runway drops to ${bear?.runway_display} with ₹${bear?.additional_capital_required?.toLocaleString()} in required capital.`}
-                    </p>
+                    <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+                      <p className="mb-1 text-[10px] font-black uppercase tracking-wide text-slate-500">Feasibility</p>
+                      <ul className="space-y-1 text-[11px] text-emerald-900">
+                        {(futureAnalysis.feasibility?.strengths || []).map((s) => (
+                          <li key={s}>+ {s}</li>
+                        ))}
+                      </ul>
+                      <ul className="mt-2 space-y-1 text-[11px] text-rose-800">
+                        {(futureAnalysis.feasibility?.risks || []).map((r) => (
+                          <li key={r}>− {r}</li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+                      <p className="mb-1 text-[10px] font-black uppercase tracking-wide text-slate-500">Market trend</p>
+                      <p className="text-xs text-slate-800">{futureAnalysis.market_trend?.trend || '—'}</p>
+                      <p className="mt-1 text-[11px] text-slate-600">{futureAnalysis.market_trend?.tam_sam_som}</p>
+                      <p className="mt-1 text-[11px] font-semibold text-slate-700">{futureAnalysis.market_trend?.timing}</p>
+                    </div>
+                    <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+                      <p className="mb-1 text-[10px] font-black uppercase tracking-wide text-slate-500">Expected revenue & valuation</p>
+                      <div className="grid grid-cols-2 gap-2 text-[11px]">
+                        <div>
+                          <span className="text-slate-500">Base ARR</span>
+                          <p className="font-bold text-slate-900">{formatMoney(futureAnalysis.revenue_valuation?.base_arr)}</p>
+                        </div>
+                        <div>
+                          <span className="text-slate-500">Implied val.</span>
+                          <p className="font-bold text-slate-900">{formatMoney(futureAnalysis.revenue_valuation?.implied_valuation)}</p>
+                        </div>
+                        <div>
+                          <span className="text-slate-500">Bull ARR</span>
+                          <p className="font-bold text-emerald-800">{formatMoney(futureAnalysis.revenue_valuation?.bull_arr)}</p>
+                        </div>
+                        <div>
+                          <span className="text-slate-500">Bear ARR</span>
+                          <p className="font-bold text-rose-800">{formatMoney(futureAnalysis.revenue_valuation?.bear_arr)}</p>
+                        </div>
+                      </div>
+                      <p className="mt-2 text-[10px] text-slate-500">{futureAnalysis.revenue_valuation?.method}</p>
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
 
-              {/* 4 Primary Graphical Charts (Section 28 & 29) */}
-              <div className="space-y-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex items-center gap-1 rounded-xl bg-slate-100 p-1 text-xs font-bold text-slate-600">
-                    <button
-                      onClick={() => setActiveGraphTab('arr')}
-                      className={`rounded-lg px-3 py-1.5 transition ${activeGraphTab === 'arr' ? 'bg-white text-emerald-800 shadow-xs' : 'hover:text-slate-900'}`}
-                    >
-                      ARR Trajectory (₹)
-                    </button>
-                    <button
-                      onClick={() => setActiveGraphTab('ending_cash')}
-                      className={`rounded-lg px-3 py-1.5 transition ${activeGraphTab === 'ending_cash' ? 'bg-white text-emerald-800 shadow-xs' : 'hover:text-slate-900'}`}
-                    >
-                      Cash & Runway (₹)
-                    </button>
-                    <button
-                      onClick={() => setActiveGraphTab('ending_customers')}
-                      className={`rounded-lg px-3 py-1.5 transition ${activeGraphTab === 'ending_customers' ? 'bg-white text-emerald-800 shadow-xs' : 'hover:text-slate-900'}`}
-                    >
-                      Active Customers (N)
-                    </button>
-                    <button
-                      onClick={() => setActiveGraphTab('operating_profit')}
-                      className={`rounded-lg px-3 py-1.5 transition ${activeGraphTab === 'operating_profit' ? 'bg-white text-emerald-800 shadow-xs' : 'hover:text-slate-900'}`}
-                    >
-                      Operating Profit / Burn (₹)
-                    </button>
+              {redTeam?.summary && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+                  <p className="mb-1 text-[10px] font-black uppercase tracking-wide text-amber-900">Red-team read</p>
+                  <p className="text-xs leading-relaxed text-amber-950/90">{redTeam.summary}</p>
+                </div>
+              )}
+
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center gap-1 rounded-xl bg-slate-100 p-1 text-xs font-bold text-slate-600">
+                    <button type="button" onClick={() => setActiveGraphTab('arr')} className={`rounded-lg px-3 py-1.5 transition ${activeGraphTab === 'arr' ? 'bg-white text-emerald-800 shadow-xs' : 'hover:text-slate-900'}`}>ARR Trajectory (₹)</button>
+                    <button type="button" onClick={() => setActiveGraphTab('ending_cash')} className={`rounded-lg px-3 py-1.5 transition ${activeGraphTab === 'ending_cash' ? 'bg-white text-emerald-800 shadow-xs' : 'hover:text-slate-900'}`}>Cash & Runway (₹)</button>
+                    <button type="button" onClick={() => setActiveGraphTab('ending_customers')} className={`rounded-lg px-3 py-1.5 transition ${activeGraphTab === 'ending_customers' ? 'bg-white text-emerald-800 shadow-xs' : 'hover:text-slate-900'}`}>Active Customers (N)</button>
+                    <button type="button" onClick={() => setActiveGraphTab('operating_profit')} className={`rounded-lg px-3 py-1.5 transition ${activeGraphTab === 'operating_profit' ? 'bg-white text-emerald-800 shadow-xs' : 'hover:text-slate-900'}`}>Operating Profit / Burn (₹)</button>
                   </div>
-
-                  <span className="text-[11px] font-semibold text-slate-400">
-                    All scenarios diverge from identical Month 0 baseline
-                  </span>
+                  <span className="text-[11px] font-semibold text-slate-400">All scenarios diverge from identical Month 0 baseline</span>
                 </div>
 
                 {activeGraphTab === 'arr' && (
-                  <MultiScenarioChart
-                    scenarios={scenarios}
-                    metric="arr"
-                    title="Annual Recurring Revenue (ARR) Trajectory (Month 0 → 24)"
-                    unit="₹"
-                  />
+                  <MultiScenarioChart scenarios={scenarios} metric="arr" title="Annual Recurring Revenue (ARR) Trajectory" unit="₹" />
                 )}
                 {activeGraphTab === 'ending_cash' && (
-                  <MultiScenarioChart
-                    scenarios={scenarios}
-                    metric="ending_cash"
-                    title="Cash Balance & Insolvency Runway Trajectory (with ₹0 threshold)"
-                    unit="₹"
-                  />
+                  <MultiScenarioChart scenarios={scenarios} metric="ending_cash" title="Cash Balance & Insolvency Runway Trajectory (with ₹0 threshold)" unit="₹" />
                 )}
                 {activeGraphTab === 'ending_customers' && (
-                  <MultiScenarioChart
-                    scenarios={scenarios}
-                    metric="ending_customers"
-                    title="Active Paying Customers Growth Trajectory (Nₜ)"
-                    unit="count"
-                  />
+                  <MultiScenarioChart scenarios={scenarios} metric="ending_customers" title="Active Paying Customers Growth Trajectory (Nₜ)" unit="count" />
                 )}
                 {activeGraphTab === 'operating_profit' && (
-                  <MultiScenarioChart
-                    scenarios={scenarios}
-                    metric="operating_profit"
-                    title="Monthly Operating Profit / Burn & Breakeven Threshold"
-                    unit="₹"
-                  />
+                  <MultiScenarioChart scenarios={scenarios} metric="operating_profit" title="Monthly Operating Profit / Burn & Breakeven Threshold" unit="₹" />
                 )}
               </div>
 
-              {/* Sensitivity Ranking Table (Section 27) */}
-              <Card
-                title="Sensitivity Driver Ranking"
-                subtitle="One-way ±10% perturbation ranked by ending cash impact"
-                hover={false}
-              >
+              <Card title="Sensitivity Driver Ranking" subtitle="One-way ±10% perturbation ranked by ending cash impact" hover={false}>
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs">
-                    <thead className="border-b border-slate-100 text-slate-500 font-semibold">
+                    <thead className="border-b border-slate-100 font-semibold text-slate-500">
                       <tr>
                         <th className="p-2.5">Driver Assumption</th>
                         <th className="p-2.5">Adverse Case Cash</th>
@@ -1107,21 +1033,11 @@ export default function SimulationPage() {
                     <tbody>
                       {sensitivity.map((item) => (
                         <tr key={item.variable} className="border-b border-slate-50 hover:bg-slate-50/50">
-                          <td className="p-2.5 font-bold capitalize text-slate-900">
-                            {item.variable.replaceAll('_', ' ')}
-                          </td>
-                          <td className="p-2.5 text-rose-600 font-semibold">
-                            {formatMoney(item.downside_ending_cash)}
-                          </td>
-                          <td className="p-2.5 text-emerald-700 font-semibold">
-                            {formatMoney(item.upside_ending_cash)}
-                          </td>
-                          <td className="p-2.5 text-slate-700">
-                            {formatMoney(item.impact_on_ending_arr)}
-                          </td>
-                          <td className="p-2.5 font-bold text-slate-900">
-                            {formatMoney(item.impact_on_ending_cash)}
-                          </td>
+                          <td className="p-2.5 font-bold capitalize text-slate-900">{item.variable.replaceAll('_', ' ')}</td>
+                          <td className="p-2.5 font-semibold text-rose-600">{formatMoney(item.downside_ending_cash)}</td>
+                          <td className="p-2.5 font-semibold text-emerald-700">{formatMoney(item.upside_ending_cash)}</td>
+                          <td className="p-2.5 text-slate-700">{formatMoney(item.impact_on_ending_arr)}</td>
+                          <td className="p-2.5 font-bold text-slate-900">{formatMoney(item.impact_on_ending_cash)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -1129,68 +1045,27 @@ export default function SimulationPage() {
                 </div>
               </Card>
 
-              {/* Complete 21-Column Monthly Forecast Table (Section 23) */}
-              <Card
-                title="Monthly Forecast Schedule"
-                subtitle="Deterministic month-by-month financial and customer schedule"
-                hover={false}
-              >
-                <div className="mb-3 flex items-center justify-between">
+              <Card title="Monthly Forecast Schedule" subtitle="Deterministic month-by-month financial and customer schedule" hover={false}>
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-1 rounded-lg bg-slate-100 p-1 text-xs font-bold text-slate-600">
-                    <button
-                      onClick={() => setActiveTableScenario('bull')}
-                      className={`rounded px-2.5 py-1 ${activeTableScenario === 'bull' ? 'bg-emerald-600 text-white' : ''}`}
-                    >
-                      Bull Schedule
-                    </button>
-                    <button
-                      onClick={() => setActiveTableScenario('base')}
-                      className={`rounded px-2.5 py-1 ${activeTableScenario === 'base' ? 'bg-sky-600 text-white' : ''}`}
-                    >
-                      Base Schedule
-                    </button>
-                    <button
-                      onClick={() => setActiveTableScenario('bear')}
-                      className={`rounded px-2.5 py-1 ${activeTableScenario === 'bear' ? 'bg-rose-600 text-white' : ''}`}
-                    >
-                      Bear Schedule
-                    </button>
+                    <button type="button" onClick={() => setActiveTableScenario('bull')} className={`rounded px-2.5 py-1 ${activeTableScenario === 'bull' ? 'bg-emerald-600 text-white' : ''}`}>Bull Schedule</button>
+                    <button type="button" onClick={() => setActiveTableScenario('base')} className={`rounded px-2.5 py-1 ${activeTableScenario === 'base' ? 'bg-sky-600 text-white' : ''}`}>Base Schedule</button>
+                    <button type="button" onClick={() => setActiveTableScenario('bear')} className={`rounded px-2.5 py-1 ${activeTableScenario === 'bear' ? 'bg-rose-600 text-white' : ''}`}>Bear Schedule</button>
                   </div>
-                  <span className="text-[11px] text-slate-400">
-                    Forecast: {form.months} Months
-                  </span>
+                  <span className="text-[11px] text-slate-400">Forecast: {form.months} Months</span>
                 </div>
-
-                <div className="max-h-96 overflow-x-auto overflow-y-auto">
-                  <table className="w-full text-left text-xs whitespace-nowrap">
-                    <thead className="sticky top-0 bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+                <div className="overflow-x-auto rounded-lg border border-slate-100">
+                  <table className="min-w-[1100px] w-full text-left text-[11px]">
+                    <thead className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 font-semibold text-slate-500">
                       <tr>
-                        <th className="p-2">Mo</th>
-                        <th className="p-2">Start Users</th>
-                        <th className="p-2">New Users</th>
-                        <th className="p-2">Churned</th>
-                        <th className="p-2">End Users</th>
-                        <th className="p-2">ARPU</th>
-                        <th className="p-2">MRR</th>
-                        <th className="p-2">ARR</th>
-                        <th className="p-2">CAC</th>
-                        <th className="p-2">Marketing</th>
-                        <th className="p-2">Margin</th>
-                        <th className="p-2">Gross Profit</th>
-                        <th className="p-2">Fixed Costs</th>
-                        <th className="p-2">OPEX</th>
-                        <th className="p-2">Operating Profit</th>
-                        <th className="p-2">Start Cash</th>
-                        <th className="p-2">Financing</th>
-                        <th className="p-2">End Cash</th>
-                        <th className="p-2">Cumulative Burn</th>
-                        <th className="p-2">Cash-Out</th>
-                        <th className="p-2">Break-Even</th>
+                        {['Mo', 'Start N', 'New', 'Churn', 'End N', 'ARPU', 'MRR', 'ARR', 'CAC', 'Mktg', 'GM', 'GP', 'Fixed', 'OPEX', 'OP', 'Start ₹', 'Fin.', 'End ₹', 'Burn Σ', 'Cash', 'BE'].map((h) => (
+                          <th key={h} className="whitespace-nowrap p-2">{h}</th>
+                        ))}
                       </tr>
                     </thead>
                     <tbody>
                       {(scenarios[activeTableScenario]?.monthly_forecast || []).map((row) => (
-                        <tr key={row.month} className="border-b border-slate-100 hover:bg-slate-50 font-medium">
+                        <tr key={row.month} className="border-b border-slate-100 font-medium hover:bg-slate-50">
                           <td className="p-2 font-bold text-slate-900">M{row.month}</td>
                           <td className="p-2">{formatNumber(row.starting_customers)}</td>
                           <td className="p-2 text-emerald-600">+{formatNumber(row.new_customers)}</td>
@@ -1205,24 +1080,16 @@ export default function SimulationPage() {
                           <td className="p-2">{formatMoney(row.gross_profit)}</td>
                           <td className="p-2">{formatMoney(row.fixed_costs)}</td>
                           <td className="p-2">{formatMoney(row.operating_expenses)}</td>
-                          <td className={`p-2 font-bold ${row.operating_profit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                            {formatMoney(row.operating_profit)}
-                          </td>
+                          <td className={`p-2 font-bold ${row.operating_profit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{formatMoney(row.operating_profit)}</td>
                           <td className="p-2">{formatMoney(row.starting_cash)}</td>
                           <td className="p-2">{row.financing_inflow ? formatMoney(row.financing_inflow) : '—'}</td>
-                          <td className={`p-2 font-bold ${row.ending_cash < 0 ? 'text-rose-600' : 'text-slate-900'}`}>
-                            {formatMoney(row.ending_cash)}
-                          </td>
+                          <td className={`p-2 font-bold ${row.ending_cash < 0 ? 'text-rose-600' : 'text-slate-900'}`}>{formatMoney(row.ending_cash)}</td>
                           <td className="p-2">{formatMoney(row.cumulative_burn)}</td>
                           <td className="p-2">
-                            <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${row.ending_cash <= 0 ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'}`}>
-                              {row.cash_out_status}
-                            </span>
+                            <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${row.ending_cash <= 0 ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'}`}>{row.cash_out_status}</span>
                           </td>
                           <td className="p-2">
-                            <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${row.operating_profit >= 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
-                              {row.break_even_status}
-                            </span>
+                            <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${row.operating_profit >= 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{row.break_even_status}</span>
                           </td>
                         </tr>
                       ))}
@@ -1231,12 +1098,12 @@ export default function SimulationPage() {
                 </div>
               </Card>
 
-              {/* Engine Version & Disclaimer Footer */}
-              <p className="text-center text-xs text-slate-400">
+              <p className="text-center text-[10px] text-slate-400">
                 {result.disclaimer} · Engine v{result.engine_version} · Simulation ID: {result.simulation_id}
               </p>
-            </>
+            </div>
           )}
+
         </div>
       </div>
     </div>

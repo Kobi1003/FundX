@@ -59,6 +59,7 @@ export default function App() {
             <Route path="/startup/dashboard" element={<StartupDashboardPage />} />
             <Route path="/startup/dealroom" element={<StartupDealroomPage />} />
             <Route path="/startup/verifier" element={<StartupVerifierPage />} />
+            <Route path="/startup/simulator" element={<Navigate to="/simulation" replace />} />
             <Route path="/startup/deals/create" element={<StartupCreateDealPage />} />
 
             {/* Investor Portal */}
@@ -68,6 +69,7 @@ export default function App() {
             <Route path="/investor/dealroom" element={<InvestorDealroomPage />} />
             <Route path="/investor/my-deals" element={<InvestorMyDealsPage />} />
             <Route path="/investor/profile" element={<InvestorProfilePage />} />
+            <Route path="/investor/simulator" element={<Navigate to="/simulation" replace />} />
 
             {/* Legacy Fallbacks */}
             <Route path="/startups" element={<AdminStartupsPage />} />

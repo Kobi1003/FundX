@@ -7,6 +7,8 @@ python-multipart==0.0.20
 neo4j==5.27.0
 supabase==2.11.0
 pypdf==5.1.0
-# Optional: install when DEMO_MODE=false and you want live Gemini/ADK
-# google-genai
-# google-adk
+# Live Gemini path (AgentRunner / hybrid ADK extract). Keep DEMO_MODE=true for Mock.
+google-generativeai==0.8.5
+# Optional ADK SequentialAgent — install manually when DEMO_MODE=false if desired:
+#   pip install "google-adk>=1.0.0"
+# ADKIntegrationPoint detects import; AgentRunner remains the reliable default.

@@ -177,18 +177,43 @@ def run_single(request: SimulationRequest, scenario_name: str = "base") -> dict[
     validate_request(request)
 
     # Initialize Starting Baseline (Month 0)
+    # Revenue levers (independent, directional):
+    #   MRR_t = customers_t × ARPU_eff
+    #   ARPU_eff blends typed ARPU with Starting_MRR/customers so BOTH
+    #   Starting MRR and Customers move Bull/Base/Bear in the same direction.
+    # Cash ∝ Starting Cash (funding). Paid adds ∝ 1/CAC.
     customers = float(request.current_customers)
-    arpu = float(request.pricing)
-    if arpu == 0.0 and customers > 0 and request.current_revenue > 0:
-        arpu = float(request.current_revenue / customers)
-    elif customers == 0.0 and arpu > 0 and request.current_revenue > 0:
-        customers = float(round(request.current_revenue / arpu))
+    pricing = float(request.pricing)
+    reported_mrr = float(request.current_revenue)
 
-    # Authoritative Month 0 MRR
-    m0 = customers * arpu if (customers > 0 and arpu > 0) else float(request.current_revenue)
+    if customers > 0 and pricing > 0 and reported_mrr > 0:
+        # Month 0 cash/revenue anchor = Starting MRR (identical across Bull/Base/Bear).
+        # Forward ARPU blends typed ARPU (scenario-adjusted) with MRR/customers so
+        # both Starting MRR and Customers move ending ARR in the same direction.
+        m0 = reported_mrr
+        arpu = 0.5 * (pricing + (reported_mrr / customers))
+    elif request.authoritative_mrr_basis == "reported_mrr" and reported_mrr > 0:
+        m0 = reported_mrr
+        if customers > 0:
+            arpu = m0 / customers
+        else:
+            arpu = pricing
+            if arpu > 0:
+                customers = float(round(m0 / arpu))
+    elif customers > 0 and pricing > 0:
+        arpu = pricing
+        m0 = customers * arpu
+    elif reported_mrr > 0:
+        m0 = reported_mrr
+        arpu = (reported_mrr / customers) if customers > 0 else pricing
+        if customers <= 0 and arpu > 0:
+            customers = float(round(m0 / arpu))
+    else:
+        arpu = pricing
+        m0 = 0.0
+
     initial_cash = float(request.funding)
     cash = initial_cash
-
     gross_margin = float(request.starting_gross_margin)
     fixed = float(request.fixed_monthly_costs if request.fixed_monthly_costs is not None else request.operating_expenses)
     marketing = float(request.marketing_spend)
@@ -216,15 +241,26 @@ def run_single(request: SimulationRequest, scenario_name: str = "base") -> dict[
 
     for month in range(1, request.months + 1):
         starting_customers = customers
+        decay = (1.0 - request.growth_decay_rate) ** (month - 1) if request.growth_decay_rate else 1.0
 
-        # 1. Customer Acquisition via Marketing & CAC
+        # 1. Customer Acquisition via Marketing & CAC (+ optional organic growth target)
         effective_cac = cac * ((1 + request.cac_change_rate) ** (month - 1)) if request.cac_change_rate else cac
         if request.new_customers_per_month is not None:
-            new_customers = float(request.new_customers_per_month)
+            paid_customers = float(request.new_customers_per_month) * decay
         elif effective_cac > 0 and marketing > 0:
-            new_customers = marketing / effective_cac
+            paid_customers = (marketing / effective_cac) * decay
         else:
-            new_customers = 0.0
+            paid_customers = 0.0
+
+        if request.monthly_customer_growth is not None:
+            organic_rate = request.monthly_customer_growth
+        elif request.growth_rate is not None and request.growth_rate > -0.99:
+            # Convert claimed annual growth into a monthly organic acquisition rate.
+            organic_rate = (1.0 + request.growth_rate) ** (1.0 / 12.0) - 1.0
+        else:
+            organic_rate = 0.0
+        organic_customers = max(0.0, starting_customers * organic_rate * decay)
+        new_customers = paid_customers + organic_customers
 
         # 2. Customer Churn
         churned_customers = starting_customers * churn
@@ -233,10 +269,11 @@ def run_single(request: SimulationRequest, scenario_name: str = "base") -> dict[
         customers = max(0.0, starting_customers + new_customers - churned_customers)
         net_customer_growth = customers - starting_customers
 
-        # 4. ARPU Evolution
+        # 4. ARPU Evolution (explicit monthly ARPU growth and/or revenue growth proxy)
         if request.arpu_growth_rate:
             arpu *= 1 + request.arpu_growth_rate
-
+        if request.monthly_revenue_growth:
+            arpu *= 1 + request.monthly_revenue_growth
         # 5. Authoritative MRR & ARR (MRR = Ending Customers * ARPU)
         mrr = customers * arpu
         arr = mrr * 12.0
@@ -296,6 +333,8 @@ def run_single(request: SimulationRequest, scenario_name: str = "base") -> dict[
             "date": _date_for_month(request.starting_month, month - 1),
             "starting_customers": round(starting_customers, 2),
             "new_customers": round(new_customers, 2),
+            "paid_customers": round(paid_customers, 2),
+            "organic_customers": round(organic_customers, 2),
             "churned_customers": round(churned_customers, 2),
             "ending_customers": round(customers, 2),
             "net_customer_growth": round(net_customer_growth, 2),

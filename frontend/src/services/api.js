@@ -196,7 +196,9 @@ export const api = {
   verifyInvestorAi: (body) =>
     request('/api/ai/verify/investor', { method: 'POST', body: JSON.stringify(body) }),
   analyzeThesis: (body) =>
-    request('/api/ai/analyze-thesis', { method: 'POST', body: JSON.stringify(body) }),
+    request('/api/ai/analyze-thesis', { method: 'POST', body: JSON.stringify({ run_full_simulation: true, ...body }) }),
+  thesisSimulate: (body) =>
+    request('/api/ai/thesis-simulate', { method: 'POST', body: JSON.stringify({ run_full_simulation: true, ...body }) }),
   runStartupAnalysis: (body) =>
     request('/api/ai/startup-analysis', { method: 'POST', body: JSON.stringify(body) }),
   runInvestorAnalysis: (body) =>

@@ -1,8 +1,13 @@
-"""Tool stubs for future ADK tool registration (search, retrieval, etc.)."""
+"""Deterministic tools for ADK / AgentRunner (search stubs + simulation)."""
 
 from __future__ import annotations
 
 from typing import Any
+
+from app.schemas.requests import SimulationRequest
+from app.schemas.thesis_extract import ThesisAssumptions
+from app.simulation.sensitivity import run_sensitivity
+from app.simulation.simulator import run_scenarios
 
 
 def matching_score(startup_industries: list[str], investor_industries: list[str]) -> float:
@@ -30,3 +35,20 @@ def echo_structured_metrics(metrics: dict[str, Any]) -> dict[str, Any]:
         "valuation",
     }
     return {k: metrics.get(k) for k in allowed if metrics.get(k) is not None}
+
+
+def run_scenarios_tool(assumptions: dict[str, Any]) -> dict[str, Any]:
+    """ADK-callable wrapper: never invent math — always use Python engine."""
+    try:
+        req = ThesisAssumptions.model_validate(assumptions).to_simulation_request()
+    except Exception:
+        req = SimulationRequest(**{k: v for k, v in assumptions.items() if k in SimulationRequest.model_fields})
+    return run_scenarios(req)
+
+
+def run_sensitivity_tool(assumptions: dict[str, Any], change: float = 0.10) -> list[dict[str, Any]]:
+    try:
+        req = ThesisAssumptions.model_validate(assumptions).to_simulation_request()
+    except Exception:
+        req = SimulationRequest(**{k: v for k, v in assumptions.items() if k in SimulationRequest.model_fields})
+    return run_sensitivity(req, change=change)

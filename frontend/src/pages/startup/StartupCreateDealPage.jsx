@@ -449,6 +449,29 @@ export default function StartupCreateDealPage() {
                     </ul>
                   </div>
                 )}
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    navigate('/simulation', {
+                      state: {
+                        fromThesis: 1,
+                        thesis: form.thesis,
+                        aiReport,
+                        assumptions: aiReport.extracted_assumptions,
+                        simulatorForm: aiReport.simulator_form,
+                        futureAnalysis: aiReport.future_analysis,
+                        scenarios: aiReport.scenarios,
+                        sensitivity: aiReport.sensitivity,
+                        simulationDetail: aiReport.simulation_detail,
+                        insights: aiReport.insights,
+                      },
+                    })
+                  }
+                  className="w-full rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-2.5 text-xs font-bold text-emerald-900 hover:bg-emerald-100"
+                >
+                  Open in Financial Simulator
+                </button>
               </div>
             ) : (
               <div className="p-8 text-center text-slate-400 text-xs space-y-2">

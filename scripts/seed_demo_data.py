@@ -285,11 +285,14 @@ def seed_neo4j(uri: str, user: str = "neo4j", password: str = "fundx_neo4j_passw
         driver = GraphDatabase.driver(uri, auth=(user, password))
         with driver.session() as session:
             for stmt in statements:
-                if stmt.startswith("//"):
+                lines = [ln for ln in stmt.splitlines() if not ln.strip().startswith("//")]
+                body = "\n".join(lines).strip()
+                if not body:
                     continue
-                session.run(stmt)
+                session.run(body)
         driver.close()
         print("[SUCCESS] Neo4j graph nodes & relationships seeded successfully!")
+        print("  Tip: also run `python scripts/sync_neo4j_from_postgres.py` to mirror live Postgres rows.")
     except ImportError:
         print("  Notice: `neo4j` Python driver not installed in host python; skipping direct Neo4j seed.")
     except Exception as exc:

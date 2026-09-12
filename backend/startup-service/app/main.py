@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 sys.path.insert(0, "/app")
 
 from shared.neo4j_client import health_check as neo4j_health  # noqa: E402
+from shared.neo4j.graph_sync import upsert_startup  # noqa: E402
 from shared.supabase_client import supabase_configured  # noqa: E402
 from shared import db  # noqa: E402
 from shared.local_storage import read_text_excerpt, save_bytes  # noqa: E402
@@ -274,6 +275,13 @@ async def create_startup(payload: StartupCreate) -> dict[str, Any]:
         **payload.model_dump(),
     }
     _STARTUPS[startup_id] = row
+    upsert_startup(
+        startup_id,
+        name=payload.name,
+        stage=payload.stage or "Seed",
+        industry=payload.industry or "Technology",
+        email=payload.email,
+    )
     return row
 
 
@@ -311,6 +319,13 @@ async def update_startup(startup_id: str, payload: StartupUpdate) -> dict[str, A
             query = f"UPDATE public.startups SET {', '.join(set_clauses)}, updated_at = NOW() WHERE id = $1 RETURNING *"
             updated = await db.fetchrow(query, *args)
             if updated:
+                upsert_startup(
+                    startup_id,
+                    name=updated.get("name"),
+                    stage=updated.get("stage"),
+                    industry=updated.get("industry"),
+                    email=updated.get("email"),
+                )
                 return updated
 
     if startup_id in _STARTUPS:
@@ -318,6 +333,13 @@ async def update_startup(startup_id: str, payload: StartupUpdate) -> dict[str, A
         current.update(updates)
         current["updated_at"] = datetime.utcnow().isoformat() + "Z"
         _STARTUPS[startup_id] = current
+        upsert_startup(
+            startup_id,
+            name=current.get("name"),
+            stage=current.get("stage"),
+            industry=current.get("industry"),
+            email=current.get("email"),
+        )
         return current
 
     raise HTTPException(status_code=404, detail="Startup not found")

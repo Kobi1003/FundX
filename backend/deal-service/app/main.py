@@ -19,6 +19,8 @@ from pydantic import BaseModel, Field
 sys.path.insert(0, "/app")
 
 from shared.neo4j_client import health_check as neo4j_health  # noqa: E402
+from shared.neo4j.graph_sync import express_interest as neo4j_express_interest  # noqa: E402
+from shared.neo4j.graph_sync import record_offer, upsert_deal  # noqa: E402
 from shared.supabase_client import supabase_configured  # noqa: E402
 from shared import db  # noqa: E402
 
@@ -339,6 +341,17 @@ async def create_deal(payload: DealCreate) -> dict[str, Any]:
             """,
             offer_id, deal_id, startup_name, payload.target_raise, payload.equity_pct, payload.royalty_pct, payload.royalty_payout_terms
         )
+        record_offer(
+            offer_id,
+            deal_id,
+            investor_id="system",
+            investor_name=startup_name,
+            sender_type="startup",
+            amount=payload.target_raise,
+            equity_pct=payload.equity_pct,
+            royalty_pct=payload.royalty_pct,
+            status="active",
+        )
 
     row = {
         "id": deal_id,
@@ -348,6 +361,15 @@ async def create_deal(payload: DealCreate) -> dict[str, Any]:
         **payload.model_dump(),
     }
     _DEALS[deal_id] = row
+    upsert_deal(
+        deal_id,
+        startup_id=payload.startup_id,
+        title=payload.title,
+        status=payload.status,
+        industry=industry,
+        funding_stage=payload.funding_stage,
+        target_raise=payload.target_raise,
+    )
     return row
 
 
@@ -459,7 +481,27 @@ async def publish_deal(deal_id: str) -> dict[str, Any]:
             offer_id, deal_id, deal.get("startup_name", "Startup"), deal.get("target_raise", 500000),
             deal.get("equity_pct", 7.0), deal.get("royalty_pct", 2.0), deal.get("royalty_payout_terms", "Standard terms")
         )
+        record_offer(
+            offer_id,
+            deal_id,
+            investor_id="system",
+            investor_name=deal.get("startup_name", "Startup"),
+            sender_type="startup",
+            amount=deal.get("target_raise"),
+            equity_pct=deal.get("equity_pct"),
+            royalty_pct=deal.get("royalty_pct"),
+            status="active",
+        )
 
+    upsert_deal(
+        deal_id,
+        startup_id=deal.get("startup_id"),
+        title=deal.get("title"),
+        status="published",
+        industry=deal.get("industry"),
+        funding_stage=deal.get("funding_stage"),
+        target_raise=float(deal["target_raise"]) if deal.get("target_raise") is not None else None,
+    )
     return {"message": "Deal published to marketplace successfully", "deal": deal}
 
 
@@ -480,6 +522,14 @@ async def express_interest(deal_id: str, payload: dict[str, Any]) -> dict[str, A
     await db.execute(
         "INSERT INTO public.deal_interests (id, deal_id, investor_id, investor_name, status) VALUES ($1, $2, $3, $4, 'interested')",
         int_id, deal_id, investor_id, investor_name
+    )
+    deal_row = await db.fetchrow("SELECT startup_id FROM public.deals WHERE id = $1", deal_id)
+    neo4j_express_interest(
+        investor_id,
+        deal_id,
+        startup_id=(deal_row or {}).get("startup_id") if deal_row else (_DEALS.get(deal_id) or {}).get("startup_id"),
+        investor_name=investor_name,
+        status="interested",
     )
     return {"id": int_id, "deal_id": deal_id, "investor_id": investor_id, "investor_name": investor_name, "status": "interested"}
 
@@ -610,6 +660,18 @@ async def create_offer(deal_id: str, payload: OfferCreate) -> dict[str, Any]:
         "message": payload.message or "Submitted offer proposal.",
         "timestamp": datetime.utcnow().isoformat() + "Z",
     }
+    record_offer(
+        offer_id,
+        deal_id,
+        investor_id=payload.investor_id,
+        investor_name=payload.investor_name or "Investor",
+        sender_type=payload.sender_type,
+        amount=payload.amount,
+        equity_pct=payload.equity_pct,
+        royalty_pct=payload.royalty_pct,
+        status="active",
+    )
+    upsert_deal(deal_id, status="negotiating" if deal.get("status") == "published" else deal.get("status"))
     return new_offer
 
 

@@ -217,3 +217,10 @@ async def verify_investor_endpoint(payload: dict[str, Any]) -> dict[str, Any]:
 async def analyze_thesis_endpoint(payload: dict[str, Any]) -> dict[str, Any]:
     return await run_thesis_analysis(payload)
 
+
+@app.post("/ai/thesis-simulate")
+async def thesis_simulate_endpoint(payload: dict[str, Any]) -> dict[str, Any]:
+    """Alias: thesis future analysis + full deterministic simulation pack for Simulator UI."""
+    body = {**payload, "run_full_simulation": True}
+    return await run_thesis_analysis(body)
+
