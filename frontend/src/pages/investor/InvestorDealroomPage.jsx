@@ -13,7 +13,44 @@ import {
   ShieldAlert,
   Activity,
   Users,
+  Sparkles,
+  X,
+  Building2,
+  ArrowRight,
 } from 'lucide-react'
+
+function scoreSimilarDeal(base, candidate) {
+  if (!base || !candidate || base.id === candidate.id) return -1
+  if (candidate.status === 'draft' || candidate.status === 'closed') return -1
+  let score = 0
+  if (base.industry && candidate.industry === base.industry) score += 50
+  else if (
+    base.industry &&
+    candidate.industry &&
+    (base.industry.includes(candidate.industry) || candidate.industry.includes(base.industry))
+  ) {
+    score += 25
+  }
+  if (base.funding_stage && candidate.funding_stage === base.funding_stage) score += 25
+  const a = Number(base.target_raise) || 0
+  const b = Number(candidate.target_raise) || 0
+  if (a > 0 && b > 0) {
+    const ratio = Math.min(a, b) / Math.max(a, b)
+    score += Math.round(ratio * 20)
+  }
+  if (candidate.status === 'negotiating' || candidate.status === 'active') score += 8
+  return score
+}
+
+function findSimilarDeals(base, allDeals, limit = 3) {
+  if (!base) return []
+  return (allDeals || [])
+    .map((d) => ({ deal: d, score: scoreSimilarDeal(base, d) }))
+    .filter((x) => x.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .map((x) => x.deal)
+}
 
 function relativeTime(ts) {
   if (!ts) return 'just now'
@@ -138,6 +175,9 @@ export default function InvestorDealroomPage() {
     message: '',
   })
   const [clock, setClock] = useState(() => Date.now())
+  const [similarOpen, setSimilarOpen] = useState(false)
+  const [similarDeals, setSimilarDeals] = useState([])
+  const [dismissedForDealId, setDismissedForDealId] = useState(null)
 
   const isVerified = Boolean(user?.is_verified)
   const myId = user?.investor_id || 'investor-elena'
@@ -158,10 +198,11 @@ export default function InvestorDealroomPage() {
       const matchedDeal = targetDealId ? roomDeals.find((d) => d.id === targetDealId) : null
       const dealToSelect = matchedDeal || roomDeals[0]
       if (dealToSelect) {
-        await selectDeal(dealToSelect, { syncUrl: !matchedDeal })
+        await selectDeal(dealToSelect, { syncUrl: !matchedDeal, showSimilar: true })
       } else {
         setSelectedDeal(null)
         setTreeData(null)
+        setSimilarOpen(false)
       }
     } catch (err) {
       setAlert({ type: 'error', text: err.message })
@@ -175,10 +216,16 @@ export default function InvestorDealroomPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [targetDealId])
 
-  const selectDeal = async (deal, { syncUrl = true } = {}) => {
+  const selectDeal = async (deal, { syncUrl = true, showSimilar = true } = {}) => {
     setSelectedDeal(deal)
     if (syncUrl && deal?.id) {
       setSearchParams({ dealId: deal.id }, { replace: true })
+    }
+    if (showSimilar && deal?.id && dismissedForDealId !== deal.id) {
+      // Will refresh once deals list is ready; also compute immediately from current list
+      const recs = findSimilarDeals(deal, deals)
+      setSimilarDeals(recs)
+      setSimilarOpen(recs.length > 0)
     }
     try {
       const tree = await api.getNegotiationTree(deal.id)
@@ -306,8 +353,81 @@ export default function InvestorDealroomPage() {
 
   const liveCount = deals.filter((d) => d.status !== 'closed').length
 
+  // When investor enters / switches a dealroom, surface similar open rounds
+  useEffect(() => {
+    if (!selectedDeal?.id || deals.length === 0) return
+    if (dismissedForDealId === selectedDeal.id) return
+    const recs = findSimilarDeals(selectedDeal, deals)
+    setSimilarDeals(recs)
+    setSimilarOpen(recs.length > 0)
+  }, [selectedDeal?.id, deals, dismissedForDealId])
+
   return (
-    <div className="space-y-3 pb-6">
+    <div className="relative space-y-3 pb-6">
+      {similarOpen && similarDeals.length > 0 && selectedDeal && (
+        <div
+          className="fixed right-4 top-20 z-40 w-[min(100%-2rem,20rem)]"
+          role="dialog"
+          aria-label="Similar deals recommendation"
+          style={{ animation: 'fxSimilarIn 280ms ease-out' }}
+        >
+          <div className="overflow-hidden rounded-xl border border-emerald-200/80 bg-card shadow-lg ring-1 ring-emerald-500/10">
+            <div className="flex items-start justify-between gap-2 border-b bg-emerald-50/80 px-3 py-2.5">
+              <div className="min-w-0">
+                <p className="flex items-center gap-1.5 text-xs font-semibold text-emerald-900">
+                  <Sparkles className="h-3.5 w-3.5 shrink-0" />
+                  Similar rounds for you
+                </p>
+                <p className="mt-0.5 text-[10px] leading-snug text-emerald-800/80">
+                  Based on {selectedDeal.startup_name} · {selectedDeal.industry || 'sector'} ·{' '}
+                  {selectedDeal.funding_stage || 'stage'}
+                </p>
+              </div>
+              <button
+                type="button"
+                className="rounded-md p-1 text-muted-foreground hover:bg-white hover:text-foreground"
+                onClick={() => {
+                  setSimilarOpen(false)
+                  setDismissedForDealId(selectedDeal.id)
+                }}
+                aria-label="Dismiss recommendations"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <ul className="divide-y">
+              {similarDeals.map((d) => (
+                <li key={d.id}>
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2 px-3 py-2.5 text-left transition hover:bg-muted/50"
+                    onClick={() => {
+                      setDismissedForDealId(null)
+                      selectDeal(d, { syncUrl: true, showSimilar: true })
+                    }}
+                  >
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted">
+                      <Building2 className="h-3.5 w-3.5 text-muted-foreground" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-xs font-semibold">{d.startup_name}</p>
+                      <p className="truncate text-[10px] text-muted-foreground">
+                        {d.industry} · {d.funding_stage} · $
+                        {(Number(d.target_raise) || 0).toLocaleString()}
+                      </p>
+                    </div>
+                    <ArrowRight className="h-3.5 w-3.5 shrink-0 text-primary" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <div className="border-t bg-muted/30 px-3 py-1.5 text-center text-[10px] text-muted-foreground">
+              Tap a round to open its dealroom
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-col gap-2 rounded-xl border bg-card p-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="flex flex-wrap items-center gap-2">
