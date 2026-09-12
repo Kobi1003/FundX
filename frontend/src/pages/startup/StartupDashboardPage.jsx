@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useAuthContext } from '../../context/AuthContext'
 import api from '../../services/api'
 import VerificationBadge from '../../components/VerificationBadge'
+import DarkVeilCard from '../../components/DarkVeilCard'
 import { BentoGrid, BentoItem } from '../../components/BentoGrid'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -40,6 +41,14 @@ export default function StartupDashboardPage() {
 
   return (
     <div className="space-y-4 pb-8">
+      <DarkVeilCard
+        title={startup?.name ? `${startup.name} · Founder Command Center` : 'Founder Command Center'}
+        subtitle="Manage equity raises, royalty terms, investor term sheets, and verification standing with Dark Veil AI analytics."
+        defaultHue={150}
+        defaultSpeed={0.5}
+        defaultWarp={0.3}
+      />
+
       <BentoGrid>
         <BentoItem className="md:col-span-6 xl:col-span-8">
           <Card className="h-full">

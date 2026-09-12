@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuthContext } from '../../context/AuthContext'
 import api from '../../services/api'
 import VerificationBadge from '../../components/VerificationBadge'
+import DarkVeilCard from '../../components/DarkVeilCard'
 import { BentoGrid, BentoItem } from '../../components/BentoGrid'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -52,6 +53,14 @@ export default function InvestorDashboardPage() {
 
   return (
     <div className="space-y-4 pb-8">
+      <DarkVeilCard
+        title={investor?.firm ? `${investor.firm} · Investor Intelligence Desk` : 'Investor Intelligence Desk'}
+        subtitle="Real-time deal flow, multi-party term sheet negotiations, and AI feasibility scores."
+        defaultHue={210}
+        defaultSpeed={0.45}
+        defaultWarp={0.4}
+      />
+
       <BentoGrid>
         <BentoItem className="md:col-span-6 xl:col-span-8">
           <Card className="h-full">

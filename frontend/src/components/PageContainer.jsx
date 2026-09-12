@@ -1,6 +1,8 @@
+import PageTransition from './PageTransition'
+
 export default function PageContainer({ title, description, action, children }) {
   return (
-    <div className="w-full space-y-6 pb-8">
+    <PageTransition className="w-full space-y-6 pb-8">
       {(title || action) && (
         <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
           <div>
@@ -11,6 +13,6 @@ export default function PageContainer({ title, description, action, children }) 
         </div>
       )}
       {children}
-    </div>
+    </PageTransition>
   )
 }

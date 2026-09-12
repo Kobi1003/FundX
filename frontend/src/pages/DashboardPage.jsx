@@ -5,6 +5,7 @@ import Card from '../components/Card'
 import Button from '../components/Button'
 import LoadingState from '../components/LoadingState'
 import ErrorState from '../components/ErrorState'
+import DarkVeilCard from '../components/DarkVeilCard'
 import { api } from '../services/api'
 import {
   Activity,
@@ -72,6 +73,17 @@ export default function DashboardPage() {
         </div>
       }
     >
+      {/* Dark Veil Hero Feature Banner */}
+      <div className="mb-6">
+        <DarkVeilCard
+          title="FundX Gateway & Neural Risk Engine"
+          subtitle="Real-time WebGL shader background powered by React Bits Dark Veil and live microservices mesh status."
+          defaultHue={135}
+          defaultSpeed={0.45}
+          defaultWarp={0.3}
+        />
+      </div>
+
       {/* Quick Stats Header */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-6">
         <div className="glass-panel p-4 flex items-center gap-3">
