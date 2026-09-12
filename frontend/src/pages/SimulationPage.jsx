@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import {
   AlertCircle,
@@ -31,6 +31,7 @@ import {
   TrendingUp,
   UserCheck,
   Users,
+  Upload,
   Wrench,
   Zap
 } from 'lucide-react'
@@ -407,9 +408,11 @@ export default function SimulationPage() {
   const [advanced, setAdvanced] = useState(false)
   const [caseType, setCaseType] = useState('claimed')
   const [thesisText, setThesisText] = useState('')
+  const [thesisFileName, setThesisFileName] = useState('')
   const [futureAnalysis, setFutureAnalysis] = useState(null)
   const [analyzingThesis, setAnalyzingThesis] = useState(false)
   const [thesisHydrated, setThesisHydrated] = useState(false)
+  const thesisFileRef = useRef(null)
 
   // Month-0 Consistency Calculation
   const reportedMRR = Number(form.current_mrr || 0)
@@ -539,7 +542,7 @@ export default function SimulationPage() {
 
   const analyzeThesisAndSimulate = useCallback(async () => {
     if (!thesisText.trim()) {
-      setError('Paste a thesis before running Analyze & Simulate.')
+      setError('Paste a thesis or upload a thesis PDF before running Analyze & Simulate.')
       return
     }
     setAnalyzingThesis(true)
@@ -555,7 +558,6 @@ export default function SimulationPage() {
         run_full_simulation: true,
       })
       applyThesisResult(res)
-      // Recalculate with hydrated drivers so charts match editable form
       if (res?.simulator_form) {
         const next = { ...form, ...res.simulator_form }
         const body = {
@@ -588,6 +590,57 @@ export default function SimulationPage() {
     }
   }, [thesisText, form, caseType, applyThesisResult, runSimulation])
 
+  const analyzeThesisFile = useCallback(
+    async (file) => {
+      if (!file) return
+      setAnalyzingThesis(true)
+      setError(null)
+      setThesisFileName(file.name)
+      try {
+        const res = await api.analyzeThesisUpload(file, {
+          company_name: form.company_name,
+          industry: form.industry,
+          funding_stage: form.stage,
+          amount: form.funding,
+          run_full_simulation: true,
+        })
+        if (res?.extracted_text_preview) {
+          setThesisText(res.extracted_text_preview)
+        }
+        applyThesisResult(res)
+        if (res?.simulator_form) {
+          const next = { ...form, ...res.simulator_form }
+          await runSimulation({
+            company_name: next.company_name,
+            industry: next.industry,
+            stage: next.stage,
+            current_mrr: Number(next.current_mrr),
+            current_customers: Number(next.current_customers),
+            pricing: Number(next.pricing),
+            cac: Number(next.cac),
+            churn: Number(next.churn),
+            starting_gross_margin: Number(next.starting_gross_margin),
+            funding: Number(next.funding),
+            starting_cash: Number(next.funding),
+            operating_expenses: Number(next.operating_expenses),
+            marketing_spend: Number(next.marketing_spend),
+            growth_rate: Number(next.growth_rate),
+            growth_decay_rate: Number(next.growth_decay_rate || 0.015),
+            months: Number(next.months),
+            valuation_multiple: Number(next.valuation_multiple || 8),
+            authoritative_mrr_basis: 'reported_mrr',
+            simulation_case: caseType,
+          })
+        }
+      } catch (err) {
+        setError(err.message || 'Thesis PDF analysis failed.')
+      } finally {
+        setAnalyzingThesis(false)
+      }
+    },
+    [form, caseType, applyThesisResult, runSimulation],
+  )
+
   // Debounced auto-recalculation when inputs change
   useEffect(() => {
     if (!result) return undefined
@@ -596,6 +649,26 @@ export default function SimulationPage() {
     }, 600)
     return () => window.clearTimeout(timer)
   }, [payload]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Optional deep-link: /simulation?thesisDoc=AeroGrid_Investment_Thesis_Q3.pdf
+  useEffect(() => {
+    const params = new URLSearchParams(location.search || '')
+    const doc = params.get('thesisDoc')
+    if (!doc || thesisHydrated) return
+    setThesisHydrated(true)
+    const url = `/theses/${encodeURIComponent(doc.replace(/^.*[\\/]/, ''))}`
+    ;(async () => {
+      try {
+        const resp = await fetch(url)
+        if (!resp.ok) throw new Error(`Thesis PDF not found: ${doc}`)
+        const blob = await resp.blob()
+        const file = new File([blob], doc.replace(/^.*[\\/]/, ''), { type: 'application/pdf' })
+        await analyzeThesisFile(file)
+      } catch (err) {
+        setError(err.message || 'Could not load thesis PDF')
+      }
+    })()
+  }, [location.search, thesisHydrated, analyzeThesisFile])
 
   // Hydrate from create-deal / deep-link state once
   useEffect(() => {
@@ -616,7 +689,6 @@ export default function SimulationPage() {
       }
       applyThesisResult(pack)
     }
-    // Initial run after short delay so form state commits
     const t = window.setTimeout(() => runSimulation(), 50)
     return () => window.clearTimeout(t)
   }, [location.state, thesisHydrated, applyThesisResult, runSimulation])
@@ -699,14 +771,35 @@ export default function SimulationPage() {
                 Thesis → Future Analysis
               </h2>
               <p className="sim-panel-subtitle mt-0.5 text-xs font-semibold" style={{ color: '#334155' }}>
-                ADK / Gemini extracts drivers; Python simulates
+                Upload a deal thesis PDF (or paste text). ADK / Gemini extracts drivers; Python simulates.
               </p>
             </div>
+            <input
+              ref={thesisFileRef}
+              type="file"
+              accept="application/pdf,.pdf,.txt"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0]
+                if (f) analyzeThesisFile(f)
+                e.target.value = ''
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => thesisFileRef.current?.click()}
+              disabled={analyzingThesis || loading}
+              className="mb-2 flex w-full items-center justify-center gap-2 rounded-lg border border-dashed px-3 py-2 text-xs font-bold hover:bg-slate-50 disabled:opacity-50"
+              style={{ color: '#0f172a', borderColor: '#94a3b8' }}
+            >
+              <Upload className="h-3.5 w-3.5" />
+              {thesisFileName ? `Uploaded: ${thesisFileName}` : 'Upload thesis PDF'}
+            </button>
             <textarea
               value={thesisText}
               onChange={(e) => setThesisText(e.target.value)}
-              rows={5}
-              placeholder="Paste investment thesis here, then Analyze & Simulate…"
+              rows={4}
+              placeholder="Or paste investment thesis text here…"
               className="mb-2 w-full rounded-lg border px-2.5 py-2 text-xs font-medium outline-none focus:border-emerald-600"
               style={{ color: '#0f172a', background: '#ffffff', borderColor: '#94a3b8' }}
             />
@@ -717,7 +810,7 @@ export default function SimulationPage() {
               className="flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-700 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-800 disabled:opacity-50"
             >
               {analyzingThesis ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <FlaskConical className="h-3.5 w-3.5" />}
-              {analyzingThesis ? 'Analyzing thesis…' : 'Analyze & Simulate'}
+              {analyzingThesis ? 'Extracting drivers…' : 'Analyze & Simulate'}
             </button>
           </section>
 

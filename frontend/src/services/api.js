@@ -51,6 +51,7 @@ const MOCK_DEALS = [
     royalty_payout_terms: '2.5% of quarterly gross revenue until 2.0x return cap',
     status: 'negotiating',
     thesis: 'Decentralized renewables will hit 32% grid penetration by 2030. AeroGrid combines frequency stabilization algorithms with IoT telemetry to cut curtailment by 40%.',
+    thesis_doc: 'AeroGrid_Investment_Thesis_Q3.pdf',
     ai_score: 88,
   },
   {
@@ -68,6 +69,7 @@ const MOCK_DEALS = [
     royalty_payout_terms: '1.5% of quarterly revenues until 1.75x payback cap',
     status: 'closed',
     thesis: 'Eliminates multi-day settlement delays and 2.4% FX friction for cross-border B2B transactions.',
+    thesis_doc: 'FinPulse_SeriesA_Thesis.pdf',
     ai_score: 92,
   },
   {
@@ -82,27 +84,39 @@ const MOCK_DEALS = [
     target_raise: 400000,
     equity_pct: 6.0,
     royalty_pct: 3.0,
-    royalty_payout_terms: '3.0% of licensing revenues until 2.5x payback',
     status: 'published',
-    thesis: 'Generative chemistry slashing oncology synthesis cycles.',
-    ai_score: 85,
+    thesis_doc: 'BioSynthetix_Thesis_Draft_v1.pdf',
+    ai_score: 79,
   },
   {
     id: 'deal-quantumledger',
     startup_id: 'startup-quantumledger',
     startup_name: 'QuantumLedger AI',
     startup_verified: true,
-    title: 'Post-Quantum Cryptographic Audit Engine & Tokenization Protocol',
-    pitch: 'Lattice-based cryptography securing financial transactions against quantum decryption threats',
-    industry: 'Cybersecurity',
-    funding_stage: 'Series A',
+    title: 'Post-Quantum Cryptographic Audit Engine',
+    pitch: 'Lattice-based zero-knowledge auditing rails',
+    industry: 'AI / DeepTech',
+    funding_stage: 'Seed',
     target_raise: 1200000,
     equity_pct: 9.0,
     royalty_pct: 2.0,
-    royalty_payout_terms: '2.0% quarterly revenue share capped at 2.0x',
+    status: 'active',
+    thesis_doc: 'QuantumLedger_SeriesSeed_Thesis.pdf',
+    ai_score: 95,
+  },
+  {
+    id: 'deal-cargoflow',
+    startup_name: 'CargoFlow Logistics',
+    startup_verified: true,
+    title: 'AI Lane Pricing for Cold-Chain Freight',
+    industry: 'Logistics',
+    funding_stage: 'Seed',
+    target_raise: 600000,
+    equity_pct: 8.0,
+    royalty_pct: 2.5,
     status: 'published',
-    thesis: 'Quantum computing poses an existential threat to RSA/ECC encryption.',
-    ai_score: 90,
+    thesis_doc: 'CargoFlow_Seed_Thesis.pdf',
+    ai_score: 85,
   },
 ]
 
@@ -197,6 +211,16 @@ export const api = {
     request('/api/ai/verify/investor', { method: 'POST', body: JSON.stringify(body) }),
   analyzeThesis: (body) =>
     request('/api/ai/analyze-thesis', { method: 'POST', body: JSON.stringify({ run_full_simulation: true, ...body }) }),
+  analyzeThesisUpload: async (file, meta = {}) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    if (meta.company_name) fd.append('company_name', meta.company_name)
+    if (meta.industry) fd.append('industry', meta.industry)
+    if (meta.funding_stage) fd.append('funding_stage', meta.funding_stage)
+    if (meta.amount != null) fd.append('amount', String(meta.amount))
+    fd.append('run_full_simulation', String(meta.run_full_simulation !== false))
+    return request('/api/ai/analyze-thesis-upload', { method: 'POST', body: fd })
+  },
   thesisSimulate: (body) =>
     request('/api/ai/thesis-simulate', { method: 'POST', body: JSON.stringify({ run_full_simulation: true, ...body }) }),
   runStartupAnalysis: (body) =>

@@ -7,7 +7,7 @@ import sys
 import uuid
 from typing import Any
 
-from fastapi import BackgroundTasks, FastAPI, HTTPException
+from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
 sys.path.insert(0, "/app")
@@ -216,6 +216,64 @@ async def verify_investor_endpoint(payload: dict[str, Any]) -> dict[str, Any]:
 @app.post("/ai/analyze-thesis")
 async def analyze_thesis_endpoint(payload: dict[str, Any]) -> dict[str, Any]:
     return await run_thesis_analysis(payload)
+
+
+@app.post("/ai/analyze-thesis-upload")
+async def analyze_thesis_upload_endpoint(
+    file: UploadFile = File(...),
+    company_name: str | None = Form(None),
+    industry: str | None = Form(None),
+    funding_stage: str | None = Form(None),
+    amount: float | None = Form(None),
+    run_full_simulation: bool = Form(True),
+) -> dict[str, Any]:
+    """Extract text from an uploaded thesis PDF/TXT, then run the same analysis pack."""
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="Empty upload")
+    name = (file.filename or "thesis.pdf").lower()
+    text = ""
+    try:
+        from app.investor_due_diligence.pii_sanitizer import (
+            extract_and_sanitize_cv,
+            _extract_text_from_pdf,
+        )
+        import tempfile
+        from pathlib import Path
+
+        suffix = ".pdf" if name.endswith(".pdf") else ".txt"
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            tmp.write(raw)
+            tmp_path = tmp.name
+        try:
+            if suffix == ".pdf":
+                text = _extract_text_from_pdf(tmp_path) or ""
+            else:
+                text = raw.decode("utf-8", errors="ignore")
+            if not text.strip():
+                text, _meta = extract_and_sanitize_cv(cv_bytes=raw, filename=file.filename or "thesis.pdf")
+                if isinstance(text, tuple):
+                    text = text[0]
+        finally:
+            Path(tmp_path).unlink(missing_ok=True)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Could not read thesis file: {exc}") from exc
+
+    if not (text or "").strip():
+        raise HTTPException(status_code=400, detail="No extractable text in thesis file")
+
+    payload: dict[str, Any] = {
+        "thesis_text": text,
+        "company_name": company_name,
+        "industry": industry,
+        "funding_stage": funding_stage or "Seed",
+        "amount": amount,
+        "run_full_simulation": run_full_simulation,
+        "thesis_source_filename": file.filename,
+    }
+    result = await run_thesis_analysis(payload)
+    result["extracted_text_preview"] = (text or "")[:1200]
+    return result
 
 
 @app.post("/ai/thesis-simulate")

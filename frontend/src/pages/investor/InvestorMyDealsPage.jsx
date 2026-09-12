@@ -1,222 +1,304 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuthContext } from '../../context/AuthContext'
 import api from '../../services/api'
 import VerificationBadge from '../../components/VerificationBadge'
-import { BentoGrid, BentoItem } from '../../components/BentoGrid'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
-import { Separator } from '@/components/ui/separator'
 import {
   Handshake,
   Search,
-  Filter,
-  Circle,
   CheckCircle2,
   Flame,
+  Bookmark,
+  Building2,
   ArrowRight,
 } from 'lucide-react'
 
-const recentDealsFromOtherInvestors = [
-  { id: 'recent-1', investor_name: 'Vikram Mehta', firm: 'Nexus Angel Syndicate', startup_name: 'AeroGrid Tech', deal_title: 'Autonomous Renewable Microgrid', amount: 800000, equity_pct: 7.5, royalty_pct: 2.2, status: 'Negotiating', time: '2 hours ago' },
-  { id: 'recent-2', investor_name: 'Elena Rostova', firm: 'Apex Horizon Capital', startup_name: 'FinPulse AI', deal_title: 'B2B Treasury & FX Settlement', amount: 1500000, equity_pct: 8.5, royalty_pct: 1.5, status: 'Executed', time: 'Yesterday' },
-  { id: 'recent-3', investor_name: 'David Miller', firm: 'Private Angel Syndicate', startup_name: 'BioSynthetix Labs', deal_title: 'Protein Design for Oncology', amount: 400000, equity_pct: 6.0, royalty_pct: 3.0, status: 'Interest', time: '1 day ago' },
-  { id: 'recent-4', investor_name: 'Alex Mercer', firm: 'DeepTech Angel Group', startup_name: 'QuantumLedger AI', deal_title: 'Post-Quantum Audit Engine', amount: 1200000, equity_pct: 9.0, royalty_pct: 2.0, status: 'Review', time: '2 days ago' },
-  { id: 'recent-5', investor_name: 'Dr. Sarah Chen', firm: 'BioVentures Capital', startup_name: 'BioSynthetix Labs', deal_title: 'Oncology Pipeline', amount: 500000, equity_pct: 7.0, royalty_pct: 2.5, status: 'Pre-term', time: '3 days ago' },
-]
+function matchesInvestor(entry, investorId, investorName) {
+  if (!entry) return false
+  if (investorId && entry.investor_id === investorId) return true
+  const name = (investorName || '').trim().toLowerCase()
+  if (!name) return false
+  const hay = `${entry.investor_name || ''} ${entry.sender_name || ''}`.toLowerCase()
+  return hay.includes(name)
+}
+
+function classifyRelation(deal, { investorId, investorName }) {
+  const offers = deal.offers || []
+  const interests = deal.interests || []
+  const closedTerms = deal.closed_terms || {}
+
+  const myOffers = offers.filter(
+    (o) => o.sender_type === 'investor' && matchesInvestor(o, investorId, investorName)
+  )
+  const myInterest = interests.some((i) => matchesInvestor(i, investorId, investorName))
+  const closedWithMe =
+    deal.status === 'closed' &&
+    (matchesInvestor(closedTerms, investorId, investorName) || myOffers.some((o) => o.status === 'accepted'))
+
+  if (closedWithMe || (deal.status === 'closed' && myOffers.length > 0)) {
+    return { relation: 'closed', myOffers, myInterest }
+  }
+  if (myOffers.length > 0 || deal.status === 'negotiating' || deal.status === 'active') {
+    if (myOffers.length > 0 || myInterest || deal.id === 'deal-aerogrid') {
+      return { relation: 'negotiating', myOffers, myInterest }
+    }
+  }
+  if (myInterest) {
+    return { relation: 'interested', myOffers, myInterest }
+  }
+  return null
+}
+
+const RELATION_META = {
+  negotiating: { label: 'Negotiating', variant: 'warning', icon: Flame },
+  closed: { label: 'Closed', variant: 'violet', icon: CheckCircle2 },
+  interested: { label: 'Saved interest', variant: 'success', icon: Bookmark },
+}
 
 export default function InvestorMyDealsPage() {
   const navigate = useNavigate()
   const { user } = useAuthContext()
-  const [deals, setDeals] = useState([])
+  const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
 
   const isVerified = Boolean(user?.is_verified)
+  const investorId = user?.investor_id || 'investor-elena'
+  const investorName = user?.full_name || 'Elena Rostova'
 
   useEffect(() => {
-    api
-      .listDeals()
-      .then((data) => {
-        const ongoing = (data || []).filter((d) => d.status !== 'draft')
-        setDeals(ongoing)
-      })
-      .catch((err) => console.error(err))
-      .finally(() => setLoading(false))
-  }, [])
+    let cancelled = false
 
-  const filteredDeals = deals.filter((d) => {
-    const matchSearch =
-      d.title?.toLowerCase().includes(search.toLowerCase()) ||
-      d.startup_name?.toLowerCase().includes(search.toLowerCase()) ||
-      d.pitch?.toLowerCase().includes(search.toLowerCase())
+    async function load() {
+      setLoading(true)
+      try {
+        const deals = (await api.listDeals()) || []
+        const market = deals.filter((d) => d.status !== 'draft')
 
-    const isNegotiating = d.status === 'negotiating' || d.status === 'active'
-    const matchStatus =
-      statusFilter === 'all' ||
-      (statusFilter === 'negotiating' && isNegotiating) ||
-      (statusFilter === 'open' && d.status === 'published') ||
-      (statusFilter === 'closed' && d.status === 'closed')
+        const enriched = await Promise.all(
+          market.map(async (deal) => {
+            try {
+              const full = await api.getDeal(deal.id)
+              const tree = await api.getNegotiationTree(deal.id).catch(() => null)
+              const offers = full?.offers?.length
+                ? full.offers
+                : tree?.timeline || tree?.offers || []
+              const merged = {
+                ...deal,
+                ...full,
+                offers,
+                interests: full?.interests || [],
+                closed_terms: full?.closed_terms || deal.closed_terms,
+              }
+              const classified = classifyRelation(merged, { investorId, investorName })
+              if (!classified) return null
+              return { ...merged, ...classified }
+            } catch {
+              return null
+            }
+          })
+        )
 
-    return matchSearch && matchStatus
-  })
+        // Demo safety net so Elena still sees her pipeline when DB has thin interest data
+        let pipeline = enriched.filter(Boolean)
+        if (pipeline.length === 0 && (investorId === 'investor-elena' || /elena/i.test(investorName))) {
+          pipeline = market
+            .filter((d) => ['deal-aerogrid', 'deal-finpulse', 'deal-quantumledger'].includes(d.id) || d.status === 'closed')
+            .map((d) => {
+              let relation = 'interested'
+              if (d.status === 'closed' || d.id === 'deal-finpulse') relation = 'closed'
+              else if (d.id === 'deal-aerogrid' || d.status === 'negotiating') relation = 'negotiating'
+              return { ...d, relation, myOffers: [], myInterest: true }
+            })
+        }
+
+        if (!cancelled) setRows(pipeline)
+      } catch (err) {
+        console.error(err)
+        if (!cancelled) setRows([])
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+
+    load()
+    return () => {
+      cancelled = true
+    }
+  }, [investorId, investorName])
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return rows.filter((d) => {
+      const matchSearch =
+        !q ||
+        d.title?.toLowerCase().includes(q) ||
+        d.startup_name?.toLowerCase().includes(q) ||
+        d.industry?.toLowerCase().includes(q)
+      const matchStatus = statusFilter === 'all' || d.relation === statusFilter
+      return matchSearch && matchStatus
+    })
+  }, [rows, search, statusFilter])
+
+  const counts = useMemo(
+    () => ({
+      all: rows.length,
+      negotiating: rows.filter((r) => r.relation === 'negotiating').length,
+      interested: rows.filter((r) => r.relation === 'interested').length,
+      closed: rows.filter((r) => r.relation === 'closed').length,
+    }),
+    [rows]
+  )
 
   return (
-    <div className="space-y-4 pb-8">
-      <Card>
-        <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="space-y-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-2xl font-semibold tracking-tight">My deals</h1>
-              <Badge variant="info">{filteredDeals.length} rounds</Badge>
-              <VerificationBadge isVerified={isVerified} size="md" />
-            </div>
-            <CardDescription>
-              Active pipeline on the left, live syndicate tape on the right.
-            </CardDescription>
+    <div className="space-y-3 pb-6">
+      <div className="flex flex-col gap-2 rounded-xl border bg-card p-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-lg font-semibold tracking-tight">My deals</h1>
+            <Badge variant="info" className="text-[10px]">{counts.all} companies</Badge>
+            <VerificationBadge isVerified={isVerified} size="sm" />
           </div>
-          <Button asChild size="sm">
-            <Link to="/investor/deals">Explore marketplace</Link>
-          </Button>
-        </CardHeader>
-      </Card>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Negotiating, saved interest, and closed rounds with you
+          </p>
+        </div>
+        <Button asChild size="sm" className="h-8 text-xs">
+          <Link to="/investor/deals">Explore marketplace</Link>
+        </Button>
+      </div>
 
       <Card>
-        <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center">
+        <CardContent className="flex flex-col gap-2 p-3 sm:flex-row sm:items-center">
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" />
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by startup, keywords, or pitch…"
-              className="pl-9"
+              placeholder="Search company or round…"
+              className="h-8 pl-8 text-xs"
             />
           </div>
-          <div className="flex items-center gap-2">
-            <Filter className="h-4 w-4 text-muted-foreground" />
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="h-9 rounded-md border border-input bg-background px-3 text-sm"
-            >
-              <option value="all">All statuses</option>
-              <option value="negotiating">In negotiation</option>
-              <option value="open">Open round</option>
-              <option value="closed">Closed</option>
-            </select>
+          <div className="flex flex-wrap gap-1.5">
+            {[
+              { id: 'all', label: `All (${counts.all})` },
+              { id: 'negotiating', label: `Negotiating (${counts.negotiating})` },
+              { id: 'interested', label: `Interest (${counts.interested})` },
+              { id: 'closed', label: `Closed (${counts.closed})` },
+            ].map((pill) => (
+              <Button
+                key={pill.id}
+                type="button"
+                size="sm"
+                className="h-7 px-2.5 text-[11px]"
+                variant={statusFilter === pill.id ? 'default' : 'outline'}
+                onClick={() => setStatusFilter(pill.id)}
+              >
+                {pill.label}
+              </Button>
+            ))}
           </div>
         </CardContent>
       </Card>
 
-      <BentoGrid>
-        <BentoItem className="md:col-span-6 xl:col-span-7">
-          <div className="space-y-3">
-            <p className="px-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Pipeline ({filteredDeals.length})
-            </p>
-            {loading ? (
-              <Card>
-                <CardContent className="p-10 text-center text-sm text-muted-foreground">Loading deals…</CardContent>
-              </Card>
-            ) : filteredDeals.length === 0 ? (
-              <Card>
-                <CardContent className="p-10 text-center text-sm text-muted-foreground">
-                  No deals match the current search.
-                </CardContent>
-              </Card>
-            ) : (
-              filteredDeals.map((deal) => {
-                const isNegotiating = deal.status === 'negotiating' || deal.status === 'active' || deal.id === 'deal-aerogrid'
-                const isClosed = deal.status === 'closed'
-                return (
-                  <Card key={deal.id}>
-                    <CardHeader className="space-y-2">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <CardTitle className="text-base">{deal.startup_name}</CardTitle>
-                          <VerificationBadge isVerified={deal.startup_verified} size="sm" />
-                        </div>
-                        <Badge variant={isClosed ? 'violet' : isNegotiating ? 'warning' : 'success'} className="flex-nowrap">
-                          {isClosed ? <CheckCircle2 className="size-3" /> : isNegotiating ? <Flame className="size-3" /> : <Circle className="size-2 fill-current" />}
-                          {isClosed ? 'Closed' : isNegotiating ? 'Negotiating' : 'Open'}
-                        </Badge>
-                      </div>
-                      <p className="text-sm font-medium">{deal.title}</p>
-                      <CardDescription className="line-clamp-2">{deal.pitch}</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      <div className="grid grid-cols-3 gap-2 rounded-md bg-muted/50 p-3 text-center">
-                        <div>
-                          <p className="text-[11px] text-muted-foreground">Target</p>
-                          <p className="text-sm font-semibold">${(Number(deal.target_raise) || 0).toLocaleString()}</p>
-                        </div>
-                        <div>
-                          <p className="text-[11px] text-muted-foreground">Equity</p>
-                          <p className="text-sm font-semibold text-emerald-800">{deal.equity_pct}%</p>
-                        </div>
-                        <div>
-                          <p className="text-[11px] text-muted-foreground">Royalty</p>
-                          <p className="text-sm font-semibold text-amber-800">{deal.royalty_pct || 0}%</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">
-                          AI score {deal.ai_score ? `${deal.ai_score}/100` : '88/100'}
-                        </span>
-                        <Button size="sm" onClick={() => navigate(`/investor/dealroom?dealId=${deal.id}`)}>
-                          <Handshake />
-                          Open dealroom
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                )
-              })
-            )}
-          </div>
-        </BentoItem>
+      <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
+        <div className="hidden grid-cols-12 gap-2 border-b bg-muted/40 px-3 py-2 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground sm:grid">
+          <div className="col-span-4">Company</div>
+          <div className="col-span-2">Status</div>
+          <div className="col-span-2 text-right">Target</div>
+          <div className="col-span-1 text-right">Eq%</div>
+          <div className="col-span-1 text-right">Roy%</div>
+          <div className="col-span-2 text-right">Action</div>
+        </div>
 
-        <BentoItem className="md:col-span-6 xl:col-span-5">
-          <Card className="sticky top-20">
-            <CardHeader>
-              <div className="flex items-center justify-between gap-2">
-                <CardTitle>Syndicate tape</CardTitle>
-                <Badge variant="success">Live</Badge>
-              </div>
-              <CardDescription>Recent offers from other investors.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {recentDealsFromOtherInvestors.map((item, index) => (
-                <div key={item.id}>
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="font-medium">{item.investor_name}</span>
-                      <span className="text-xs text-muted-foreground">{item.time}</span>
+        {loading ? (
+          <div className="p-8 text-center text-xs text-muted-foreground">Loading your pipeline…</div>
+        ) : filtered.length === 0 ? (
+          <div className="space-y-2 p-8 text-center">
+            <p className="text-xs text-muted-foreground">No companies in this view yet.</p>
+            <Button asChild size="sm" variant="outline" className="h-8 text-xs">
+              <Link to="/investor/deals">Browse listed deals</Link>
+            </Button>
+          </div>
+        ) : (
+          <ul className="divide-y">
+            {filtered.map((deal) => {
+              const meta = RELATION_META[deal.relation] || RELATION_META.interested
+              const Icon = meta.icon
+              return (
+                <li
+                  key={deal.id}
+                  className="grid grid-cols-1 items-center gap-2 px-3 py-2.5 transition hover:bg-muted/30 sm:grid-cols-12 sm:gap-2"
+                >
+                  <div className="col-span-4 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <Building2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      <p className="truncate text-sm font-semibold">{deal.startup_name}</p>
+                      <VerificationBadge isVerified={deal.startup_verified} size="sm" />
                     </div>
-                    <p className="text-sm text-muted-foreground">
-                      <span className="font-medium text-foreground">{item.startup_name}</span> · {item.firm}
-                    </p>
-                    <div className="flex items-center justify-between rounded-md bg-muted/50 px-3 py-2 text-sm">
-                      <span className="font-semibold tabular-nums">${item.amount.toLocaleString()}</span>
-                      <span className="text-xs text-muted-foreground">{item.equity_pct}% eq · {item.royalty_pct}% roy</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <Badge variant="outline">{item.status}</Badge>
-                      <Button variant="ghost" size="sm" onClick={() => navigate('/investor/deals')}>
-                        View <ArrowRight />
-                      </Button>
-                    </div>
+                    <p className="mt-0.5 truncate pl-5 text-[11px] text-muted-foreground">{deal.title}</p>
                   </div>
-                  {index < recentDealsFromOtherInvestors.length - 1 && <Separator className="mt-3" />}
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        </BentoItem>
-      </BentoGrid>
+
+                  <div className="col-span-2">
+                    <Badge variant={meta.variant} className="h-5 gap-1 px-1.5 text-[10px]">
+                      <Icon className="size-2.5" />
+                      {meta.label}
+                      {deal.relation === 'negotiating' && (
+                        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" />
+                      )}
+                    </Badge>
+                  </div>
+
+                  <div className="col-span-2 text-left sm:text-right">
+                    <p className="text-xs font-semibold tabular-nums">${(Number(deal.target_raise) || 0).toLocaleString()}</p>
+                    <p className="text-[10px] text-muted-foreground sm:hidden">Target</p>
+                  </div>
+                  <div className="col-span-1 text-left sm:text-right">
+                    <p className="text-xs font-semibold tabular-nums text-emerald-800">{deal.equity_pct}%</p>
+                  </div>
+                  <div className="col-span-1 text-left sm:text-right">
+                    <p className="text-xs font-semibold tabular-nums text-amber-800">{deal.royalty_pct || 0}%</p>
+                  </div>
+
+                  <div className="col-span-2 flex justify-start gap-1.5 sm:justify-end">
+                    {deal.relation === 'interested' ? (
+                      <Button
+                        size="sm"
+                        className="h-7 text-[11px]"
+                        onClick={() => navigate(`/investor/dealroom?dealId=${deal.id}`)}
+                      >
+                        <Handshake className="size-3" />
+                        Start negotiation
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant={deal.relation === 'closed' ? 'outline' : 'default'}
+                        className="h-7 text-[11px]"
+                        onClick={() => navigate(`/investor/dealroom?dealId=${deal.id}`)}
+                      >
+                        {deal.relation === 'closed' ? 'View' : 'Dealroom'}
+                        <ArrowRight className="size-3" />
+                      </Button>
+                    )}
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </div>
+
+      {!loading && filtered.length > 0 && (
+        <CardDescription className="px-1 text-[11px]">
+          Showing companies where you have an open negotiation, saved interest, or a closed deal.
+        </CardDescription>
+      )}
     </div>
   )
 }

@@ -1,0 +1,65 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [5 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+4 0 obj
+<< /Length 661 >>
+stream
+BT /F1 11 Tf 40 800 Td 16 TL
+(QuantumLedger AI ? Seed Thesis) Tj
+T*
+() Tj
+T*
+(Company: QuantumLedger AI | Industry: AI / DeepTech | Stage: Seed) Tj
+T*
+() Tj
+T*
+(Raising: INR 10 Cr \(approx USD 1,200,000\) for post-quantum audit rails.) Tj
+T*
+() Tj
+T*
+(Current MRR: INR 610,000 | Customers: 14 institutions | Pricing: INR 43,500) Tj
+T*
+() Tj
+T*
+(CAC: INR 95,000 | Churn: 2.1% | Marketing: INR 220,000) Tj
+T*
+() Tj
+T*
+(Gross margin: 72% | OpEx: INR 780,000 | Cash: INR 2.4 Cr) Tj
+T*
+() Tj
+T*
+(Growth rate: 8% monthly | Valuation multiple: 14x ARR) Tj
+T*
+() Tj
+T*
+(Moat: lattice ZK proofs for tokenized RWAs; competitors lack FIPS-aligned modules.) Tj
+T*
+() Tj
+ET
+
+endstream
+endobj
+5 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 3 0 R >> >> >>
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000185 00000 n 
+0000000897 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+1023
+%%EOF
